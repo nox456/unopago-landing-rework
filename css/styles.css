@@ -1,0 +1,38 @@
+/* Estilos base del Panel de Administración */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #eef1f6;
+}
+
+body {
+  font-family: Archivo, Helvetica, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: #4B51F6;
+  text-decoration: none;
+}
+
+a:hover {
+  color: #297C7C;
+}
+
+input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+input[type="color"]::-webkit-color-swatch {
+  border: 1px solid rgba(15,23,42,.14);
+  border-radius: 10px;
+}

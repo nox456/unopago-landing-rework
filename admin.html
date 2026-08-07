@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UnoPago - Control de Identidad y Pagos Escolares (Admin)</title>
+
+  <!-- Prevenir fetch CORS en protocolo file:// -->
+  <script>window.__resources = window.__resources || {};</script>
+
+  <!-- Diseño CSS -->
+  <link rel="stylesheet" href="css/styles.css">
+
+  <!-- Librerías JS Vendor -->
+  <script src="js/vendor/react.production.min.js"></script>
+  <script src="js/vendor/react-dom.production.min.js"></script>
+  <script src="js/vendor/dc-runtime.js"></script>
+
+  <!-- Lógica de la Aplicación -->
+  <script src="js/app.js"></script>
+
+  <!-- Script de lógica interpretado por el runtime DC -->
+  <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+const BaseLogic = (typeof DCLogic !== 'undefined' ? DCLogic : (typeof window !== 'undefined' && window.DCLogic ? window.DCLogic : class {}));
+
+const DEF_COLORS_LIGHT = ['#F8FAFC', '#FFFFFF', '#0F172A', '#4B51F6', '#E2E8F0'];
+const DEF_COLORS_DARK = ['#0B0E13', '#161B22', '#F0F6FC', '#38BDF8', '#30363D'];
+const LABELS = ['1. Dominante (60%)', '2. Superficie (20%)', '3. Texto/Lectura', '4. Acento/CTA (10%)', '5. Neutro/Bordes (10%)'];
+const PER_PAGE = 3;
+const SERVICES = [
+  { title: 'Cobranza escolar', body: 'Emite y controla mensualidades, matrículas y cuotas especiales.', tag: 'Instituciones' },
+  { title: 'Pagos móviles', body: 'Los representantes pagan en segundos desde el móvil.', tag: 'Familias' },
+  { title: 'Reportes claros', body: 'Ingresos, morosidad y proyecciones en un solo panel.', tag: 'Dirección' }
+];
+
+class Component extends BaseLogic {
+  state = {
+    tab: 'colors',
+    paletteMode: 'light', // 'light' | 'dark'
+    activeLightId: 1,
+    activeDarkId: 101,
+    palettes: [
+      { id: 1, mode: 'light', name: 'Paleta Predeterminada Claro', note: 'Modo claro estándar', colors: ['#F8FAFC', '#FFFFFF', '#0F172A', '#4B51F6', '#E2E8F0'] },
+      { id: 2, mode: 'light', name: 'Paleta Corporativa Claro', note: 'Marca principal azul', colors: ['#F0F4F8', '#FFFFFF', '#102A43', '#0062D2', '#D9E2EC'] },
+      { id: 3, mode: 'light', name: 'Paleta Esmeralda Claro', note: 'Verde fresco escolar', colors: ['#F4FBF7', '#FFFFFF', '#0A3A2A', '#059669', '#D1FAE5'] },
+      { id: 4, mode: 'light', name: 'Paleta Cálida Claro', note: 'Temporada escolar', colors: ['#FDF8F5', '#FFFFFF', '#2D1A12', '#E05638', '#F3E2D8'] },
+
+      { id: 101, mode: 'dark', name: 'Paleta Predeterminada Oscuro', note: 'Modo noche elegante', colors: ['#0B0E13', '#161B22', '#F0F6FC', '#38BDF8', '#30363D'] },
+      { id: 102, mode: 'dark', name: 'Paleta Noche Midnight', note: 'Azul profundo de alto contraste', colors: ['#090D16', '#111827', '#F9FAFB', '#6366F1', '#1F2937'] },
+      { id: 103, mode: 'dark', name: 'Paleta Esmeralda Oscuro', note: 'Verde noche accesible', colors: ['#061712', '#0C241B', '#ECFDF5', '#10B981', '#133E30'] },
+      { id: 104, mode: 'dark', name: 'Paleta Cyberpunk Oscuro', note: 'Estilo Neón', colors: ['#0D0B18', '#161228', '#F5F3FF', '#EC4899', '#2E234B'] }
+    ],
+    palPage: 0,
+    editing: null,
+    form: null,
+    drafts: {},
+    h1: 40, h3: 22, p: 16,
+    pubH1: 40, pubH3: 22, pubP: 16, pubFamily: '',
+    typeName: 'Estilo Nuevo',
+    fontName: '',
+    fontFamily: '',
+    fontMsg: 'Ningún archivo cargado. Se usa la fuente del sistema.',
+    fontError: false,
+    types: [
+      { id: 1, name: 'Tipografía Predeterminada', font: 'Archivo (sistema)', family: '', h1: 40, h3: 22, p: 16 },
+      { id: 2, name: 'Lectura Cómoda', font: 'Archivo (sistema)', family: '', h1: 46, h3: 26, p: 18 },
+      { id: 3, name: 'Compacta Móvil', font: 'Archivo (sistema)', family: '', h1: 32, h3: 19, p: 15 },
+      { id: 4, name: 'Baja Visión', font: 'Archivo (sistema)', family: '', h1: 56, h3: 32, p: 22 }
+    ],
+    typPage: 0,
+    activeTypeId: 1,
+    tediting: null,
+    tform: null,
+    status: ''
+  };
+
+  componentDidMount() {
+    try {
+      const raw = localStorage.getItem('admin-panel-v1');
+      if (raw) {
+        const d = JSON.parse(raw);
+        const getModeOfPalette = p => {
+          if (p.mode) return p.mode;
+          if (p.id >= 100 || /dark|oscuro|noche|midnight|cyberpunk|oled/i.test(p.name || '')) return 'dark';
+          return 'light';
+        };
+        const palettes = (d.palettes || this.state.palettes).map(p => ({ ...p, mode: getModeOfPalette(p) }));
+        const activeLightId = d.activeLightId || (palettes.find(p => p.mode === 'light') || {}).id || 1;
+        const activeDarkId = d.activeDarkId || (palettes.find(p => p.mode === 'dark') || {}).id || 101;
+
+        this.setState(s => ({
+          ...s,
+          ...d,
+          palettes,
+          activeLightId,
+          activeDarkId,
+          editing: null, form: null, drafts: {}, tediting: null, tform: null, status: ''
+        }));
+        (d.types || []).forEach(t => {
+          if (t.face && t.family) this.injectFace(t.face, t.family);
+        });
+      } else {
+        this.persist({});
+      }
+    } catch (e) {}
+  }
+
+  persist(extra) {
+    const s = { ...this.state, ...extra };
+    try {
+      localStorage.setItem('admin-panel-v1', JSON.stringify({
+        palettes: s.palettes, palPage: s.palPage, activeLightId: s.activeLightId, activeDarkId: s.activeDarkId,
+        paletteMode: s.paletteMode, types: s.types, typPage: s.typPage, activeTypeId: s.activeTypeId
+      }));
+    } catch (e) {}
+  }
+
+  injectFace(dataUrl, family) {
+    if (!family || !dataUrl) return;
+    let el = document.getElementById('custom-font-face-' + family);
+    if (!el) {
+      el = document.createElement('style');
+      el.id = 'custom-font-face-' + family;
+      document.head.appendChild(el);
+    }
+    el.textContent = '@font-face{font-family:"' + family + '";src:url("' + dataUrl + '") format("truetype");font-display:swap}';
+  }
+
+  onFontFile = e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!/\.ttf$/i.test(file.name)) {
+      this.setState({ fontMsg: 'Formato no permitido: solo se aceptan archivos .ttf', fontError: true });
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const family = 'CustomTTF-' + Date.now();
+      this.injectFace(reader.result, family);
+      this.setState(s => ({
+        tform: s.tform ? { ...s.tform, family, face: reader.result, font: file.name } : s.tform,
+        fontMsg: 'Fuente aplicada: ' + file.name, fontError: false
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  pager(total, page, setPage) {
+    const pages = Math.max(1, Math.ceil(total / PER_PAGE));
+    const cur = Math.min(page, pages - 1);
+    const btn = active => ({
+      minWidth: '38px', height: '38px', padding: '0 12px', borderRadius: '999px', cursor: 'pointer',
+      font: '600 14px Archivo, sans-serif', transition: 'background .2s',
+      border: active ? '0' : '1px solid rgba(15,23,42,.14)',
+      background: active ? '#4B51F6' : '#fff',
+      color: active ? '#fff' : '#0f172a'
+    });
+    const arrow = disabled => ({ ...btn(false), opacity: disabled ? .35 : 1, cursor: disabled ? 'default' : 'pointer', fontSize: '18px' });
+    const from = total === 0 ? 0 : cur * PER_PAGE + 1;
+    const to = Math.min(total, (cur + 1) * PER_PAGE);
+    return {
+      cur, pages,
+      range: from + '–' + to + ' de ' + total,
+      prev: () => setPage(Math.max(0, cur - 1)),
+      next: () => setPage(Math.min(pages - 1, cur + 1)),
+      prevStyle: arrow(cur === 0),
+      nextStyle: arrow(cur >= pages - 1),
+      items: Array.from({ length: pages }, (_, i) => ({ n: i + 1, go: () => setPage(i), style: btn(i === cur) }))
+    };
+  }
+
+  setDraft(i, v) {
+    this.setState(s => {
+      const drafts = { ...(s.drafts || {}) };
+      if (v === null) delete drafts[i]; else drafts[i] = v;
+      return { drafts };
+    });
+  }
+
+  commitDraft(i, raw, setColor) {
+    let v = (raw || '').trim();
+    if (/^[0-9a-fA-F]{6}$/.test(v)) v = '#' + v;
+    if (/^#[0-9a-fA-F]{3}$/.test(v)) v = '#' + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) setColor(i, v.toUpperCase());
+    this.setDraft(i, null);
+  }
+
+  startForm(id) {
+    const isDark = this.state.paletteMode === 'dark';
+    const defaultColors = isDark ? DEF_COLORS_DARK.slice() : DEF_COLORS_LIGHT.slice();
+    const p = id === 'new' ? null : this.state.palettes.find(x => x.id === id);
+    this.setState({
+      editing: id,
+      form: { name: p ? p.name : '', colors: p ? p.colors.slice() : defaultColors },
+      drafts: {}
+    });
+  }
+
+  startTypeForm(id) {
+    const t = id === 'new' ? null : this.state.types.find(x => x.id === id);
+    this.setState({
+      tediting: id,
+      tform: t
+        ? { name: t.name, font: t.font, family: t.family || '', face: t.face, h1: t.h1, h3: t.h3, p: t.p }
+        : { name: '', font: 'Archivo (sistema)', family: '', face: null, h1: 40, h3: 22, p: 16 },
+      fontMsg: t && t.family ? 'Fuente actual: ' + t.font : 'Ningún archivo cargado. Se usa la fuente del sistema.',
+      fontError: false
+    });
+  }
+
+  renderVals() {
+    const st = this.state;
+    const isDarkMode = st.paletteMode === 'dark';
+
+    const getModeOfPalette = p => {
+      if (p.mode) return p.mode;
+      if (p.id >= 100 || /dark|oscuro|noche|midnight|cyberpunk|oled/i.test(p.name || '')) return 'dark';
+      return 'light';
+    };
+
+    const modePalettes = st.palettes.filter(p => getModeOfPalette(p) === st.paletteMode);
+    const activeId = isDarkMode ? st.activeDarkId : st.activeLightId;
+    const active = modePalettes.find(x => x.id === activeId) || modePalettes[0] || { colors: isDarkMode ? DEF_COLORS_DARK : DEF_COLORS_LIGHT, name: '—' };
+
+    const form = st.form;
+    const c = form ? form.colors : active.colors;
+    const activeType = st.types.find(x => x.id === st.activeTypeId) || st.types[0] || { name: '—', font: 'Archivo (sistema)', family: '', h1: 40, h3: 22, p: 16 };
+    const tf = st.tform;
+    const cur = tf || activeType;
+    const pub = { colors: active.colors, h1: activeType.h1, h3: activeType.h3, p: activeType.p, fontFamily: activeType.family || '' };
+    const previewFont = (cur.family ? '"' + cur.family + '", ' : '') + 'Archivo, sans-serif';
+    const liveFont = (pub.fontFamily ? '"' + pub.fontFamily + '", ' : '') + 'Archivo, sans-serif';
+
+    const setColor = (i, v) => this.setState(s => {
+      if (!s.form) return {};
+      const colors = s.form.colors.slice(); colors[i] = v;
+      return { form: { ...s.form, colors } };
+    });
+
+    const pal = this.pager(modePalettes.length, st.palPage, i => this.setState({ palPage: i }));
+    const typ = this.pager(st.types.length, st.typPage, i => this.setState({ typPage: i }));
+
+    const tab = active => ({
+      border: active ? '0' : '1px solid rgba(15,23,42,.14)',
+      background: active ? '#0f172a' : '#fff',
+      color: active ? '#fff' : 'rgba(15,23,42,.72)',
+      borderRadius: '999px', padding: '13px 24px', cursor: 'pointer',
+      font: '600 15px Archivo, sans-serif', transition: 'background .2s'
+    });
+
+    const num = (key, v) => {
+      const n = Math.max(8, Math.min(120, Number(v) || 0));
+      this.setState(s => s.tform ? { tform: { ...s.tform, [key]: n } } : {});
+    };
+
+    const cBg = c[0];      // 1. Dominante (60%)
+    const cSurface = c[1]; // 2. Superficie (20%)
+    const cText = c[2];    // 3. Texto y Lectura
+    const cCta = c[3];     // 4. Acento / CTA (10%)
+    const cBorder = c[4];  // 5. Neutro de Soporte (10%)
+
+    const lBg = pub.colors[0];
+    const lSurface = pub.colors[1];
+    const lText = pub.colors[2];
+    const lCta = pub.colors[3];
+    const lBorder = pub.colors[4];
+
+    return {
+      isColors: st.tab === 'colors',
+      isType: st.tab === 'type',
+      goColors: () => this.setState({ tab: 'colors' }),
+      goType: () => this.setState({ tab: 'type' }),
+      tabColorsStyle: tab(st.tab === 'colors'),
+      tabTypeStyle: tab(st.tab === 'type'),
+      statusText: st.status,
+
+      paletteMode: st.paletteMode,
+      modeTitle: isDarkMode ? 'Modo Oscuro' : 'Modo Claro',
+      modeBtnText: isDarkMode ? '☀️ Ver Paletas Modo Claro' : '🌙 Ver Paletas Modo Oscuro',
+      modeBtnStyle: {
+        background: isDarkMode ? '#38BDF8' : '#0f172a',
+        color: '#fff',
+        border: 0,
+        borderRadius: '10px',
+        padding: '12px 20px',
+        font: '600 15px Archivo, sans-serif',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        transition: 'background .2s'
+      },
+      togglePaletteMode: () => this.setState(s => {
+        const nextMode = s.paletteMode === 'light' ? 'dark' : 'light';
+        this.persist({ paletteMode: nextMode });
+        return { paletteMode: nextMode, palPage: 0, editing: null, form: null, drafts: {} };
+      }),
+
+      isNew: st.editing === 'new',
+      startNew: () => this.startForm('new'),
+      cancelForm: () => this.setState({ editing: null, form: null, drafts: {} }),
+      formName: form ? form.name : '',
+      onFormName: e => this.setState(s => ({ form: { ...s.form, name: e.target.value } })),
+      commitForm: () => this.setState(s => {
+        if (!s.form) return {};
+        const name = (s.form.name || '').trim() || ('Paleta ' + (s.paletteMode === 'dark' ? 'Oscuro' : 'Claro'));
+        const colors = s.form.colors.slice();
+        let palettes, palPage = s.palPage, status;
+        if (s.editing === 'new') {
+          const newId = Date.now();
+          palettes = s.palettes.concat([{ id: newId, mode: s.paletteMode, name, note: 'Creada para Modo ' + (s.paletteMode === 'dark' ? 'Oscuro' : 'Claro'), colors }]);
+          const count = palettes.filter(p => getModeOfPalette(p) === s.paletteMode).length;
+          palPage = Math.ceil(count / PER_PAGE) - 1;
+          status = 'Paleta “' + name + '” creada para ' + (s.paletteMode === 'dark' ? 'Modo Oscuro' : 'Modo Claro') + '.';
+        } else {
+          palettes = s.palettes.map(p => p.id === s.editing ? { ...p, name, colors } : p);
+          status = 'Paleta “' + name + '” actualizada.';
+        }
+        this.persist({ palettes });
+        return { palettes, palPage, editing: null, form: null, drafts: {}, status };
+      }),
+      formSlots: (form ? form.colors : []).map((hex, i) => ({
+        label: LABELS[i], hex,
+        draft: (st.drafts && st.drafts[i] != null) ? st.drafts[i] : hex,
+        onPick: e => { this.setDraft(i, null); setColor(i, e.target.value); },
+        onType: e => this.setDraft(i, e.target.value),
+        onCommit: e => this.commitDraft(i, e.target.value, setColor),
+        onKey: e => { if (e.key === 'Enter') this.commitDraft(i, e.target.value, setColor); }
+      })),
+      swatches: c.map(hex => ({ hex })),
+      cBg, cSurface, cText, cCta, cBorder,
+      previewFont,
+      svcCards: SERVICES.map((s, i) => ({ color: cCta, title: s.title, body: s.body, tag: s.tag })),
+      h1px: cur.h1 + 'px', h3px: cur.h3 + 'px', ppx: cur.p + 'px',
+      typePreviewNote: tf
+        ? (st.tediting === 'new' ? 'Nueva tipografía en edición' : 'Tipografía en edición')
+        : 'Tipografía cargada en el sitio: “' + activeType.name + '”',
+
+      previewNote: form
+        ? (st.editing === 'new' ? 'Vista previa de la nueva paleta (' + (isDarkMode ? 'Modo Oscuro' : 'Modo Claro') + ') en edición.' : 'Vista previa de la paleta en edición.')
+        : 'Paleta cargada para ' + (isDarkMode ? 'Modo Oscuro' : 'Modo Claro') + ': “' + active.name + '”.',
+      palettePage: modePalettes.slice(pal.cur * PER_PAGE, pal.cur * PER_PAGE + PER_PAGE).map(p => {
+        const isActive = p.id === activeId;
+        const editing = st.editing === p.id;
+        const pMode = getModeOfPalette(p);
+        return {
+          name: p.name, note: p.note,
+          chips: p.colors.map(hex => ({ hex })),
+          isEditing: editing,
+          locked: isActive,
+          editLabel: editing ? 'Cerrar' : 'Editar',
+          loadLabel: isActive ? 'Cargada' : 'Activar',
+          loadStyle: {
+            border: 0, borderRadius: '8px', padding: '10px 18px', marginLeft: '8px',
+            font: '600 14px Archivo, sans-serif', whiteSpace: 'nowrap',
+            background: isActive ? 'rgba(41,124,124,.12)' : '#4B51F6',
+            color: isActive ? '#297C7C' : '#fff',
+            cursor: isActive ? 'default' : 'pointer'
+          },
+          removeTitle: isActive ? 'No se puede eliminar la paleta cargada en el sitio' : 'Eliminar paleta',
+          removeStyle: {
+            background: 'transparent', borderRadius: '8px', padding: '9px 16px', marginLeft: '8px',
+            font: '600 14px Archivo, sans-serif', whiteSpace: 'nowrap',
+            border: '1px solid ' + (isActive ? 'rgba(15,23,42,.14)' : 'rgba(208,67,75,.35)'),
+            color: isActive ? 'rgba(15,23,42,.35)' : '#D0434B',
+            cursor: isActive ? 'not-allowed' : 'pointer'
+          },
+          edit: () => editing ? this.setState({ editing: null, form: null, drafts: {} }) : this.startForm(p.id),
+          load: () => {
+            if (isActive) return;
+            const updateKey = pMode === 'dark' ? 'activeDarkId' : 'activeLightId';
+            this.setState({ [updateKey]: p.id, editing: null, form: null, drafts: {}, status: 'Paleta ' + (pMode === 'dark' ? 'Modo Oscuro' : 'Modo Claro') + ' “' + p.name + '” aplicada al sitio.' });
+            this.persist({ [updateKey]: p.id });
+          },
+          remove: () => {
+            if (isActive) return;
+            this.setState(s => {
+              const palettes = s.palettes.filter(x => x.id !== p.id);
+              this.persist({ palettes });
+              const currentModeCount = palettes.filter(x => getModeOfPalette(x) === s.paletteMode).length;
+              return { palettes, palPage: Math.min(s.palPage, Math.max(0, Math.ceil(currentModeCount / PER_PAGE) - 1)), editing: s.editing === p.id ? null : s.editing, form: s.editing === p.id ? null : s.form };
+            });
+          }
+        };
+      }),
+      palRange: pal.range, palPrev: pal.prev, palNext: pal.next,
+      palPrevStyle: pal.prevStyle, palNextStyle: pal.nextStyle, palPages: pal.items,
+
+      onFont: this.onFontFile,
+      fontMsg: st.fontMsg,
+      fontMsgColor: st.fontError ? '#D0434B' : 'rgba(15,23,42,.55)',
+      fontLabel: cur.font || 'Archivo (sistema)',
+      isNewType: st.tediting === 'new',
+      startNewType: () => this.startTypeForm('new'),
+      cancelTypeForm: () => this.setState({ tediting: null, tform: null, fontMsg: 'Ningún archivo cargado. Se usa la fuente del sistema.', fontError: false }),
+      typeFormName: tf ? tf.name : '',
+      onTypeFormName: e => this.setState(s => ({ tform: { ...s.tform, name: e.target.value } })),
+      commitTypeForm: () => this.setState(s => {
+        if (!s.tform) return {};
+        const f = s.tform;
+        const name = (f.name || '').trim() || 'Estilo sin nombre';
+        const rec = { name, font: f.font || 'Archivo (sistema)', family: f.family || '', face: f.face, h1: f.h1, h3: f.h3, p: f.p };
+        let types, typPage = s.typPage, status;
+        if (s.tediting === 'new') {
+          types = s.types.concat([{ id: Date.now(), ...rec }]);
+          typPage = Math.ceil(types.length / PER_PAGE) - 1;
+          status = 'Tipografía “' + name + '” creada.';
+        } else {
+          types = s.types.map(t => t.id === s.tediting ? { ...t, ...rec } : t);
+          status = 'Tipografía “' + name + '” actualizada.';
+        }
+        this.persist({ types });
+        return { types, typPage, tediting: null, tform: null, status };
+      }),
+      sizeFields: [
+        { label: 'Títulos (h1 / h2)', hint: 'Encabezados principales', value: cur.h1, onChange: e => num('h1', e.target.value), inc: () => num('h1', cur.h1 + 1), dec: () => num('h1', cur.h1 - 1) },
+        { label: 'Subtítulos (h3 / h4)', hint: 'Encabezados de sección', value: cur.h3, onChange: e => num('h3', e.target.value), inc: () => num('h3', cur.h3 + 1), dec: () => num('h3', cur.h3 - 1) },
+        { label: 'Párrafos (p)', hint: 'Texto de cuerpo y botones', value: cur.p, onChange: e => num('p', e.target.value), inc: () => num('p', cur.p + 1), dec: () => num('p', cur.p - 1) }
+      ],
+      typePage: st.types.slice(typ.cur * PER_PAGE, typ.cur * PER_PAGE + PER_PAGE).map(t => {
+        const isActive = t.id === st.activeTypeId;
+        const editing = st.tediting === t.id;
+        if (t.face && t.family) this.injectFace(t.face, t.family);
+        const nameFontFamily = (t.family ? '"' + t.family + '", ' : '') + 'Archivo, sans-serif';
+        return {
+          name: t.name,
+          nameFontFamily,
+          font: t.font, h1: t.h1, h3: t.h3, p: t.p,
+          isEditing: editing,
+          locked: isActive,
+          editLabel: editing ? 'Cerrar' : 'Editar',
+          loadLabel: isActive ? 'Cargada' : 'Activar',
+          loadStyle: {
+            border: 0, borderRadius: '8px', padding: '10px 18px',
+            font: '600 14px Archivo, sans-serif', whiteSpace: 'nowrap',
+            background: isActive ? 'rgba(41,124,124,.12)' : '#4B51F6',
+            color: isActive ? '#297C7C' : '#fff',
+            cursor: isActive ? 'default' : 'pointer'
+          },
+          removeTitle: isActive ? 'No se puede eliminar la tipografía cargada en el sitio' : 'Eliminar tipografía',
+          removeStyle: {
+            background: 'transparent', borderRadius: '8px', padding: '9px 16px', marginLeft: '8px',
+            font: '600 14px Archivo, sans-serif', whiteSpace: 'nowrap',
+            border: '1px solid ' + (isActive ? 'rgba(15,23,42,.14)' : 'rgba(208,67,75,.35)'),
+            color: isActive ? 'rgba(15,23,42,.35)' : '#D0434B',
+            cursor: isActive ? 'not-allowed' : 'pointer'
+          },
+          edit: () => editing ? this.setState({ tediting: null, tform: null }) : this.startTypeForm(t.id),
+          load: () => {
+            if (isActive) return;
+            if (t.face && t.family) this.injectFace(t.face, t.family);
+            this.setState({ activeTypeId: t.id, tediting: null, tform: null, status: 'Tipografía “' + t.name + '” aplicada al sitio.' });
+            this.persist({ activeTypeId: t.id });
+          },
+          remove: () => {
+            if (isActive) return;
+            this.setState(s => {
+              const types = s.types.filter(x => x.id !== t.id);
+              this.persist({ types });
+              return { types, typPage: Math.min(s.typPage, Math.max(0, Math.ceil(types.length / PER_PAGE) - 1)), tediting: s.tediting === t.id ? null : s.tediting, tform: s.tediting === t.id ? null : s.tform };
+            });
+          }
+        };
+      }),
+      typRange: typ.range, typPrev: typ.prev, typNext: typ.next,
+      typPrevStyle: typ.prevStyle, typNextStyle: typ.nextStyle, typPages: typ.items,
+
+      liveFont,
+      lBg, lSurface, lText, lCta, lBorder,
+      lh1: pub.h1 + 'px',
+      lp: pub.p + 'px',
+      publicCards: SERVICES.map((s, i) => ({
+        bg: lCta, title: s.title, body: s.body, tag: s.tag,
+        titleSize: pub.h3 + 'px', bodySize: pub.p + 'px'
+      }))
+    };
+  }
+}
+
+  </script>
+</head>
+<body>
+  <x-dc>
+
+<div style="min-height:100vh;background:#eef1f6;color:#0f172a;padding:0 0 60px">
+
+  <header style="background:#0f172a;color:#fff;padding:20px 34px;display:flex;align-items:center;gap:26px;flex-wrap:wrap">
+    <div style="font-size:24px;font-weight:800;letter-spacing:-.02em">Panel de Administración</div>
+    <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:6px 12px;white-space:nowrap;flex:none">Evaluación 1</span>
+    <span style="flex:1 1 0;min-width:0"></span>
+    <a href="index.html" style="color:#fff;background:rgba(255,255,255,.14);padding:8px 16px;border-radius:999px;font-size:14px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px">← Ver Sitio Público</a>
+    <span style="font-size:14px;color:rgba(255,255,255,.6);flex:0 1 auto;min-width:0">{{ statusText }}</span>
+  </header>
+
+  <div style="max-width:1240px;margin:0 auto;padding:28px 34px 0;display:flex;gap:10px;flex-wrap:wrap">
+    <button sc-camel-on-click="{{ goColors }}" style="{{ tabColorsStyle }}">1 · Configuración Colores</button>
+    <button sc-camel-on-click="{{ goType }}" style="{{ tabTypeStyle }}">2 · Configuración Textos / Tipografía</button>
+  </div>
+
+  <!-- MÓDULO 1: COLORES -->
+  <sc-if value="{{ isColors }}" hint-placeholder-val="{{ true }}">
+  <main style="max-width:1240px;margin:0 auto;padding:22px 34px 0;display:flex;flex-direction:column;gap:22px">
+
+    <section style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;padding:26px;overflow:hidden">
+      <h2 style="margin:0 0 4px;font-size:21px;font-weight:700;letter-spacing:-.02em">Vista previa en tiempo real ({{ modeTitle }})</h2>
+      <p style="margin:0 0 20px;font-size:14px;color:rgba(15,23,42,.6)">{{ previewNote }}</p>
+
+      <!-- Contenedor con 5 Roles de Color (cBg, cSurface, cText, cCta, cBorder) -->
+      <div style="border:1px solid {{ cBorder }};border-radius:14px;overflow:hidden;font-family:{{ previewFont }};background:{{ cBg }};color:{{ cText }}">
+        <div style="padding:24px 22px 26px">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <span style="display:inline-block;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:{{ cCta }}">Servicios</span>
+              <h3 style="margin:10px 0 0;font-size:{{ h1px }};line-height:1.08;font-weight:800;letter-spacing:-.03em;color:{{ cText }};max-width:420px;text-wrap:balance">Todo lo que resolvemos para tu institución</h3>
+            </div>
+            <div style="display:flex;gap:8px">
+              <span style="width:40px;height:40px;border-radius:999px;border:1px solid {{ cBorder }};background:{{ cSurface }};display:flex;align-items:center;justify-content:center;font-size:18px;color:{{ cText }}">‹</span>
+              <span style="width:40px;height:40px;border-radius:999px;border:1px solid {{ cBorder }};background:{{ cSurface }};display:flex;align-items:center;justify-content:center;font-size:18px;color:{{ cText }}">›</span>
+            </div>
+          </div>
+          <div style="margin-top:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
+            <sc-for list="{{ svcCards }}" as="sv" hint-placeholder-count="3">
+              <div style="background:{{ cSurface }};border:1px solid {{ cBorder }};border-radius:16px;padding:18px 16px 20px;display:flex;flex-direction:column;gap:10px">
+                <div style="width:40px;height:40px;border-radius:11px;background:{{ cCta }};color:#fff;display:flex;align-items:center;justify-content:center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
+                </div>
+                <div style="font-size:{{ h3px }};font-weight:700;line-height:1.2;letter-spacing:-.015em;color:{{ cText }}">{{ sv.title }}</div>
+                <div style="font-size:{{ ppx }};line-height:1.5;color:{{ cText }};opacity:.78">{{ sv.body }}</div>
+                <span style="margin-top:auto;font-size:12px;font-weight:600;color:{{ cText }};opacity:.8;border-top:1px solid {{ cBorder }};padding-top:10px">{{ sv.tag }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:18px">
+            <span style="width:30px;height:6px;border-radius:999px;background:{{ cCta }}"></span>
+            <span style="width:12px;height:6px;border-radius:999px;background:{{ cBorder }}"></span>
+            <span style="width:12px;height:6px;border-radius:999px;background:{{ cBorder }}"></span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:6px;margin-top:16px">
+        <sc-for list="{{ swatches }}" as="w" hint-placeholder-count="5">
+          <div style="flex:1;height:34px;border-radius:8px;background:{{ w.hex }}"></div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;padding:26px">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px">
+        <h2 style="margin:0;font-size:21px;font-weight:700;letter-spacing:-.02em">Paletas guardadas ({{ modeTitle }})</h2>
+        <span style="flex:1 1 0;min-width:0"></span>
+        <button sc-camel-on-click="{{ togglePaletteMode }}" style="{{ modeBtnStyle }}">{{ modeBtnText }}</button>
+        <button sc-camel-on-click="{{ startNew }}" style="background:#0f172a;color:#fff;border:0;border-radius:10px;padding:12px 22px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap;transition:background .2s" style-hover="background:#4B51F6">+ Nueva paleta ({{ modeTitle }})</button>
+      </div>
+
+      <sc-if value="{{ isNew }}" hint-placeholder-val="{{ false }}">
+      <div style="border:1px solid rgba(75,81,246,.35);background:rgba(75,81,246,.04);border-radius:14px;padding:20px;margin-bottom:22px">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">Nueva paleta ({{ modeTitle }})</div>
+        <div style="font-size:13px;color:rgba(15,23,42,.6);margin-bottom:16px">Mínimo y máximo 5 colores. Se asignará automáticamente al {{ modeTitle }}.</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
+          <sc-for list="{{ formSlots }}" as="s" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;gap:12px;border:1px solid rgba(15,23,42,.10);background:#fff;border-radius:12px;padding:10px 14px">
+              <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:rgba(15,23,42,.45);width:60px">{{ s.label }}</span>
+              <input type="color" value="{{ s.hex }}" sc-camel-on-change="{{ s.onPick }}" aria-label="Color" style="width:50px;height:38px;border-radius:10px;flex:none">
+              <input type="text" value="{{ s.draft }}" sc-camel-on-change="{{ s.onType }}" sc-camel-on-blur="{{ s.onCommit }}" sc-camel-on-key-down="{{ s.onKey }}" spellcheck="false" style="flex:1;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:10px 12px;font:500 15px ui-monospace,Menlo,monospace;text-transform:uppercase;color:#0f172a;background:#f8fafc">
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:18px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+          <input type="text" value="{{ formName }}" sc-camel-on-change="{{ onFormName }}" placeholder="Nombre de la paleta" style="flex:1 1 220px;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;background:#fff">
+          <button sc-camel-on-click="{{ commitForm }}" style="background:#4B51F6;color:#fff;border:0;border-radius:10px;padding:12px 24px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap;transition:background .2s" style-hover="background:#297C7C">Crear paleta para {{ modeTitle }}</button>
+          <button sc-camel-on-click="{{ cancelForm }}" style="background:transparent;color:rgba(15,23,42,.7);border:1px solid rgba(15,23,42,.16);border-radius:10px;padding:11px 20px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap">Cancelar</button>
+        </div>
+      </div>
+      </sc-if>
+
+      <div style="overflow-x:auto">
+        <sc-raw-table style="width:100%;border-collapse:collapse;min-width:620px">
+          <sc-raw-thead>
+            <sc-raw-tr>
+              <sc-raw-th style="text-align:left;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(15,23,42,.45);padding:0 12px 12px 0">Nombre</sc-raw-th>
+              <sc-raw-th style="text-align:left;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(15,23,42,.45);padding:0 12px 12px 0">Colores</sc-raw-th>
+              <sc-raw-th style="text-align:right;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(15,23,42,.45);padding:0 0 12px 0">Acciones</sc-raw-th>
+            </sc-raw-tr>
+          </sc-raw-thead>
+          <sc-raw-tbody>
+            <sc-for list="{{ palettePage }}" as="p" hint-placeholder-count="3">
+              <sc-raw-tr style="border-top:1px solid rgba(15,23,42,.08)">
+                <sc-raw-td style="padding:14px 12px 14px 0;font-size:15px;font-weight:600">{{ p.name }}<div style="font:500 12px Archivo,sans-serif;color:rgba(15,23,42,.5);margin-top:3px">{{ p.note }}</div></sc-raw-td>
+                <sc-raw-td style="padding:14px 12px 14px 0">
+                  <div style="display:flex;gap:5px">
+                    <sc-for list="{{ p.chips }}" as="ch" hint-placeholder-count="5">
+                      <span style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(15,23,42,.10);background:{{ ch.hex }}"></span>
+                    </sc-for>
+                  </div>
+                </sc-raw-td>
+                <sc-raw-td style="padding:14px 0;text-align:right;white-space:nowrap">
+                  <button sc-camel-on-click="{{ p.load }}" style="{{ p.loadStyle }}">{{ p.loadLabel }}</button>
+                  <button sc-camel-on-click="{{ p.edit }}" style="background:transparent;color:#0f172a;border:1px solid rgba(15,23,42,.18);border-radius:8px;padding:9px 16px;font:600 14px Archivo,sans-serif;cursor:pointer;margin-left:8px;transition:background .2s" style-hover="background:rgba(15,23,42,.06)">{{ p.editLabel }}</button>
+                  <button sc-camel-on-click="{{ p.remove }}" disabled="{{ p.locked }}" title="{{ p.removeTitle }}" style="{{ p.removeStyle }}">Eliminar</button>
+                </sc-raw-td>
+              </sc-raw-tr>
+              <sc-if value="{{ p.isEditing }}" hint-placeholder-val="{{ false }}">
+              <sc-raw-tr>
+                <sc-raw-td colspan="3" style="padding:0 0 18px">
+                  <div style="border:1px solid rgba(75,81,246,.35);background:rgba(75,81,246,.04);border-radius:14px;padding:20px">
+                    <div style="font-size:16px;font-weight:700;margin-bottom:14px">Editar “{{ p.name }}”</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
+                      <sc-for list="{{ formSlots }}" as="s" hint-placeholder-count="5">
+                        <div style="display:flex;align-items:center;gap:12px;border:1px solid rgba(15,23,42,.10);background:#fff;border-radius:12px;padding:10px 14px">
+                          <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:rgba(15,23,42,.45);width:60px">{{ s.label }}</span>
+                          <input type="color" value="{{ s.hex }}" sc-camel-on-change="{{ s.onPick }}" aria-label="Color" style="width:50px;height:38px;border-radius:10px;flex:none">
+                          <input type="text" value="{{ s.draft }}" sc-camel-on-change="{{ s.onType }}" sc-camel-on-blur="{{ s.onCommit }}" sc-camel-on-key-down="{{ s.onKey }}" spellcheck="false" style="flex:1;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:10px 12px;font:500 15px ui-monospace,Menlo,monospace;text-transform:uppercase;color:#0f172a;background:#f8fafc">
+                        </div>
+                      </sc-for>
+                    </div>
+                    <div style="margin-top:18px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+                      <input type="text" value="{{ formName }}" sc-camel-on-change="{{ onFormName }}" placeholder="Nombre de la paleta" style="flex:1 1 220px;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;background:#fff">
+                      <button sc-camel-on-click="{{ commitForm }}" style="background:#4B51F6;color:#fff;border:0;border-radius:10px;padding:12px 24px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap;transition:background .2s" style-hover="background:#297C7C">Guardar cambios</button>
+                      <button sc-camel-on-click="{{ cancelForm }}" style="background:transparent;color:rgba(15,23,42,.7);border:1px solid rgba(15,23,42,.16);border-radius:10px;padding:11px 20px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap">Cancelar</button>
+                    </div>
+                  </div>
+                </sc-raw-td>
+              </sc-raw-tr>
+              </sc-if>
+            </sc-for>
+          </sc-raw-tbody>
+        </sc-raw-table>
+      </div>
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:20px">
+        <span style="font-size:13px;color:rgba(15,23,42,.5);margin-right:6px">{{ palRange }}</span>
+        <button sc-camel-on-click="{{ palPrev }}" style="{{ palPrevStyle }}">‹</button>
+        <sc-for list="{{ palPages }}" as="pg" hint-placeholder-count="2">
+          <button sc-camel-on-click="{{ pg.go }}" style="{{ pg.style }}">{{ pg.n }}</button>
+        </sc-for>
+        <button sc-camel-on-click="{{ palNext }}" style="{{ palNextStyle }}">›</button>
+      </div>
+    </section>
+  </main>
+  </sc-if>
+
+  <!-- MÓDULO 2: TIPOGRAFÍA -->
+  <sc-if value="{{ isType }}" hint-placeholder-val="{{ false }}">
+  <main style="max-width:1240px;margin:0 auto;padding:22px 34px 0;display:flex;flex-direction:column;gap:22px">
+
+    <section style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;padding:26px">
+      <h2 style="margin:0 0 4px;font-size:21px;font-weight:700;letter-spacing:-.02em">Vista previa de texto</h2>
+      <p style="margin:0 0 20px;font-size:14px;color:rgba(15,23,42,.6)">{{ typePreviewNote }} · Fuente: <strong>{{ fontLabel }}</strong></p>
+      <div style="border:1px solid {{ cBorder }};border-radius:14px;padding:24px;font-family:{{ previewFont }};background:{{ cBg }};color:{{ cText }}">
+        <span style="display:inline-block;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:{{ cCta }}">Servicios</span>
+        <h3 style="margin:10px 0 0;font-size:{{ h1px }};line-height:1.08;font-weight:800;letter-spacing:-.03em;color:{{ cText }};text-wrap:balance">Todo lo que resolvemos para tu institución</h3>
+        <h4 style="margin:14px 0 0;font-size:{{ h3px }};line-height:1.25;font-weight:600;color:{{ cCta }}">Cobranza, pagos y reportes en un solo lugar</h4>
+        <p style="margin:12px 0 0;font-size:{{ ppx }};line-height:1.55;color:{{ cText }};opacity:.78">Párrafo de muestra: la tipografía cargada y los tamaños numéricos configurados se aplican de forma inmediata, antes de guardar los cambios.</p>
+        <div style="margin-top:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
+          <sc-for list="{{ svcCards }}" as="sv" hint-placeholder-count="3">
+            <div style="background:{{ cSurface }};border:1px solid {{ cBorder }};border-radius:16px;padding:18px 16px 20px;display:flex;flex-direction:column;gap:10px">
+              <div style="width:40px;height:40px;border-radius:11px;background:{{ sv.color }}"></div>
+              <div style="font-size:{{ h3px }};font-weight:700;line-height:1.2;color:{{ cText }}">{{ sv.title }}</div>
+              <div style="font-size:{{ ppx }};line-height:1.5;color:{{ cText }};opacity:.78">{{ sv.body }}</div>
+              <span style="margin-top:auto;font-size:12px;font-weight:600;color:{{ cText }};opacity:.8;border-top:1px solid {{ cBorder }};padding-top:10px">{{ sv.tag }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <span style="display:inline-block;margin-top:20px;background:{{ cCta }};color:#fff;border-radius:999px;padding:12px 24px;font-size:{{ ppx }};font-weight:600">Solicitar demo</span>
+      </div>
+    </section>
+
+    <section style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;padding:26px">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px">
+        <h2 style="margin:0;font-size:21px;font-weight:700;letter-spacing:-.02em">Tipografías / estilos guardados</h2>
+        <span style="flex:1 1 0;min-width:0"></span>
+        <button sc-camel-on-click="{{ startNewType }}" style="background:#0f172a;color:#fff;border:0;border-radius:10px;padding:12px 22px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap;transition:background .2s" style-hover="background:#4B51F6">+ Nueva tipografía</button>
+      </div>
+
+      <sc-if value="{{ isNewType }}" hint-placeholder-val="{{ false }}">
+      <div style="border:1px solid rgba(75,81,246,.35);background:rgba(75,81,246,.04);border-radius:14px;padding:20px;margin-bottom:22px">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">Nueva tipografía</div>
+        <div style="font-size:13px;color:rgba(15,23,42,.6);margin-bottom:16px">Solo archivos <strong>.ttf</strong>. Ajusta los tamaños numéricos y visualiza los cambios al instante.</div>
+        <label style="display:flex;flex-direction:column;gap:10px;border:1.5px dashed rgba(15,23,42,.22);border-radius:14px;padding:18px;cursor:pointer;background:#fff">
+          <span style="font:600 15px Archivo,sans-serif">Subir fuente (.ttf)</span>
+          <input type="file" accept=".ttf" sc-camel-on-change="{{ onFont }}" style="font-size:14px">
+          <span style="font-size:13px;color:{{ fontMsgColor }}">{{ fontMsg }}</span>
+        </label>
+        <div style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px">
+          <sc-for list="{{ sizeFields }}" as="f" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:14px;border:1px solid rgba(15,23,42,.10);background:#fff;border-radius:12px;padding:12px 14px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:15px;font-weight:600">{{ f.label }}</div>
+                <div style="font-size:13px;color:rgba(15,23,42,.5);margin-top:2px">{{ f.hint }}</div>
+              </div>
+              <button sc-camel-on-click="{{ f.dec }}" aria-label="Reducir" style="width:38px;height:38px;border-radius:999px;border:1px solid rgba(15,23,42,.14);background:#f8fafc;font-size:18px;cursor:pointer">−</button>
+              <input type="number" min="8" max="120" value="{{ f.value }}" sc-camel-on-change="{{ f.onChange }}" style="width:80px;border:1px solid rgba(15,23,42,.14);border-radius:999px;padding:10px;font:600 16px Archivo,sans-serif;text-align:center;background:#fff;color:#0f172a">
+              <button sc-camel-on-click="{{ f.inc }}" aria-label="Aumentar" style="width:38px;height:38px;border-radius:999px;border:1px solid rgba(15,23,42,.14);background:#f8fafc;font-size:18px;cursor:pointer">+</button>
+              <span style="font-size:13px;color:rgba(15,23,42,.45);width:20px">px</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- Muestra de vista previa de tamaños en el formulario -->
+        <div style="margin-top:16px;background:#fff;border:1px solid rgba(15,23,42,.12);border-radius:12px;padding:18px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(15,23,42,.45);margin-bottom:12px">Muestra de tamaños en tiempo real</div>
+          <div style="font-family:{{ previewFont }};display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:{{ h1px }};font-weight:800;line-height:1.1;color:#0f172a;text-wrap:balance">Paga y cobra sin complicaciones</div>
+            <div style="font-size:{{ h3px }};font-weight:600;line-height:1.25;color:#4B51F6">Una solución digital simple y adaptada a tu colegio</div>
+            <div style="font-size:{{ ppx }};line-height:1.5;color:rgba(15,23,42,.75);text-wrap:pretty">Los representantes pagan mensualidades y matrículas en segundos desde su celular sin filas ni papeleo.</div>
+          </div>
+        </div>
+
+        <div style="margin-top:18px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+          <input type="text" value="{{ typeFormName }}" sc-camel-on-change="{{ onTypeFormName }}" placeholder="Nombre del estilo" style="flex:1 1 220px;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;background:#fff">
+          <button sc-camel-on-click="{{ commitTypeForm }}" style="background:#4B51F6;color:#fff;border:0;border-radius:10px;padding:12px 24px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap;transition:background .2s" style-hover="background:#297C7C">Crear tipografía</button>
+          <button sc-camel-on-click="{{ cancelTypeForm }}" style="background:transparent;color:rgba(15,23,42,.7);border:1px solid rgba(15,23,42,.16);border-radius:10px;padding:11px 20px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap">Cancelar</button>
+        </div>
+      </div>
+      </sc-if>
+
+      <div style="overflow-x:auto">
+        <sc-raw-table style="width:100%;border-collapse:collapse;min-width:660px">
+          <sc-raw-thead>
+            <sc-raw-tr>
+              <sc-raw-th style="text-align:left;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(15,23,42,.45);padding:0 12px 12px 0">Estilo</sc-raw-th>
+              <sc-raw-th style="text-align:left;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(15,23,42,.45);padding:0 12px 12px 0">Fuente</sc-raw-th>
+              <sc-raw-th style="text-align:left;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(15,23,42,.45);padding:0 12px 12px 0">Título</sc-raw-th>
+              <sc-raw-th style="text-align:left;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(15,23,42,.45);padding:0 12px 12px 0">Subtítulo</sc-raw-th>
+              <sc-raw-th style="text-align:left;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(15,23,42,.45);padding:0 12px 12px 0">Párrafo</sc-raw-th>
+              <sc-raw-th style="text-align:right;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(15,23,42,.45);padding:0 0 12px 0">Acciones</sc-raw-th>
+            </sc-raw-tr>
+          </sc-raw-thead>
+          <sc-raw-tbody>
+            <sc-for list="{{ typePage }}" as="t" hint-placeholder-count="3">
+              <sc-raw-tr style="border-top:1px solid rgba(15,23,42,.08)">
+                <sc-raw-td style="padding:14px 12px 14px 0;font-size:16px;font-weight:600;font-family:{{ t.nameFontFamily }}">{{ t.name }}</sc-raw-td>
+                <sc-raw-td style="padding:14px 12px 14px 0;font-size:14px;color:rgba(15,23,42,.66)">{{ t.font }}</sc-raw-td>
+                <sc-raw-td style="padding:14px 12px 14px 0;font-size:14px">{{ t.h1 }} px</sc-raw-td>
+                <sc-raw-td style="padding:14px 12px 14px 0;font-size:14px">{{ t.h3 }} px</sc-raw-td>
+                <sc-raw-td style="padding:14px 12px 14px 0;font-size:14px">{{ t.p }} px</sc-raw-td>
+                <sc-raw-td style="padding:14px 0;text-align:right;white-space:nowrap">
+                  <button sc-camel-on-click="{{ t.load }}" style="{{ t.loadStyle }}">{{ t.loadLabel }}</button>
+                  <button sc-camel-on-click="{{ t.edit }}" style="background:transparent;color:#0f172a;border:1px solid rgba(15,23,42,.18);border-radius:8px;padding:9px 16px;font:600 14px Archivo,sans-serif;cursor:pointer;margin-left:8px;transition:background .2s" style-hover="background:rgba(15,23,42,.06)">{{ t.editLabel }}</button>
+                  <button sc-camel-on-click="{{ t.remove }}" disabled="{{ t.locked }}" title="{{ t.removeTitle }}" style="{{ t.removeStyle }}">Eliminar</button>
+                </sc-raw-td>
+              </sc-raw-tr>
+              <sc-if value="{{ t.isEditing }}" hint-placeholder-val="{{ false }}">
+              <sc-raw-tr>
+                <sc-raw-td colspan="6" style="padding:0 0 18px">
+                  <div style="border:1px solid rgba(75,81,246,.35);background:rgba(75,81,246,.04);border-radius:14px;padding:20px">
+                    <div style="font-size:16px;font-weight:700;margin-bottom:14px">Editar “{{ t.name }}”</div>
+                    <label style="display:flex;flex-direction:column;gap:10px;border:1.5px dashed rgba(15,23,42,.22);border-radius:14px;padding:18px;cursor:pointer;background:#fff">
+                      <span style="font:600 15px Archivo,sans-serif">Subir fuente (.ttf)</span>
+                      <input type="file" accept=".ttf" sc-camel-on-change="{{ onFont }}" style="font-size:14px">
+                      <span style="font-size:13px;color:{{ fontMsgColor }}">{{ fontMsg }}</span>
+                    </label>
+                    <div style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px">
+                      <sc-for list="{{ sizeFields }}" as="f" hint-placeholder-count="3">
+                        <div style="display:flex;align-items:center;gap:14px;border:1px solid rgba(15,23,42,.10);background:#fff;border-radius:12px;padding:12px 14px">
+                          <div style="flex:1;min-width:0">
+                            <div style="font-size:15px;font-weight:600">{{ f.label }}</div>
+                            <div style="font-size:13px;color:rgba(15,23,42,.5);margin-top:2px">{{ f.hint }}</div>
+                          </div>
+                          <button sc-camel-on-click="{{ f.dec }}" aria-label="Reducir" style="width:38px;height:38px;border-radius:999px;border:1px solid rgba(15,23,42,.14);background:#f8fafc;font-size:18px;cursor:pointer">−</button>
+                          <input type="number" min="8" max="120" value="{{ f.value }}" sc-camel-on-change="{{ f.onChange }}" style="width:80px;border:1px solid rgba(15,23,42,.14);border-radius:9px;padding:10px;font:600 16px Archivo,sans-serif;text-align:center;background:#fff;color:#0f172a">
+                          <button sc-camel-on-click="{{ f.inc }}" aria-label="Aumentar" style="width:38px;height:38px;border-radius:999px;border:1px solid rgba(15,23,42,.14);background:#f8fafc;font-size:18px;cursor:pointer">+</button>
+                          <span style="font-size:13px;color:rgba(15,23,42,.45);width:20px">px</span>
+                        </div>
+                      </sc-for>
+                    </div>
+
+                    <!-- Muestra de vista previa de tamaños en el formulario de edición -->
+                    <div style="margin-top:16px;background:#fff;border:1px solid rgba(15,23,42,.12);border-radius:12px;padding:18px">
+                      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(15,23,42,.45);margin-bottom:12px">Muestra de tamaños en tiempo real</div>
+                      <div style="font-family:{{ previewFont }};display:flex;flex-direction:column;gap:10px">
+                        <div style="font-size:{{ h1px }};font-weight:800;line-height:1.1;color:#0f172a;text-wrap:balance">Paga y cobra sin complicaciones</div>
+                        <div style="font-size:{{ h3px }};font-weight:600;line-height:1.25;color:#4B51F6">Una solución digital simple y adaptada a tu colegio</div>
+                        <div style="font-size:{{ ppx }};line-height:1.5;color:rgba(15,23,42,.75);text-wrap:pretty">Los representantes pagan mensualidades y matrículas en segundos desde su celular sin filas ni papeleo.</div>
+                      </div>
+                    </div>
+
+                    <div style="margin-top:18px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+                      <input type="text" value="{{ typeFormName }}" sc-camel-on-change="{{ onTypeFormName }}" placeholder="Nombre del estilo" style="flex:1 1 220px;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;background:#fff">
+                      <button sc-camel-on-click="{{ commitTypeForm }}" style="background:#4B51F6;color:#fff;border:0;border-radius:10px;padding:12px 24px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap;transition:background .2s" style-hover="background:#297C7C">Guardar cambios</button>
+                      <button sc-camel-on-click="{{ cancelForm }}" style="background:transparent;color:rgba(15,23,42,.7);border:1px solid rgba(15,23,42,.16);border-radius:10px;padding:11px 20px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap">Cancelar</button>
+                    </div>
+                  </div>
+                </sc-raw-td>
+              </sc-raw-tr>
+              </sc-if>
+            </sc-for>
+          </sc-raw-tbody>
+        </sc-raw-table>
+      </div>
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:20px">
+        <span style="font-size:13px;color:rgba(15,23,42,.5);margin-right:6px">{{ typRange }}</span>
+        <button sc-camel-on-click="{{ typPrev }}" style="{{ typPrevStyle }}">‹</button>
+        <sc-for list="{{ typPages }}" as="pg" hint-placeholder-count="2">
+          <button sc-camel-on-click="{{ pg.go }}" style="{{ pg.style }}">{{ pg.n }}</button>
+        </sc-for>
+        <button sc-camel-on-click="{{ typNext }}" style="{{ typNextStyle }}">›</button>
+      </div>
+    </section>
+  </main>
+  </sc-if>
+
+  <section style="max-width:1240px;margin:26px auto 0;padding:0 34px">
+    <div style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;overflow:hidden">
+      <div style="padding:20px 26px;border-bottom:1px solid rgba(15,23,42,.08);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em">Sitio público</h2>
+        <span style="font-size:13px;color:rgba(15,23,42,.55)">Refleja la paleta y el estilo cargados con “Activar”.</span>
+      </div>
+      <!-- Contenedor Sitio Público con 5 Roles de Color cargados (lBg, lSurface, lText, lCta, lBorder) -->
+      <div style="font-family:{{ liveFont }}">
+        <div style="background:{{ lSurface }};color:{{ lText }};border-bottom:1px solid {{ lBorder }};padding:20px 26px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+          <span style="font-weight:800;font-size:20px;color:{{ lText }}">Uno<span style="color:{{ lCta }}">Pago</span></span>
+          <span style="flex:1"></span>
+          <span style="background:{{ lCta }};color:#fff;border-radius:999px;padding:10px 20px;font-size:14px;font-weight:600">Ingresar</span>
+        </div>
+        <div style="padding:34px 26px 38px;background:{{ lBg }};color:{{ lText }}">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+            <div>
+              <span style="display:inline-block;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:{{ lCta }}">Servicios</span>
+              <h3 style="margin:10px 0 0;font-size:{{ lh1 }};line-height:1.08;font-weight:800;letter-spacing:-.03em;color:{{ lText }};max-width:640px;text-wrap:balance">Todo lo que resolvemos para tu institución</h3>
+            </div>
+            <div style="display:flex;gap:8px">
+              <span style="width:44px;height:44px;border-radius:999px;border:1px solid {{ lBorder }};background:{{ lSurface }};display:flex;align-items:center;justify-content:center;font-size:20px;color:{{ lText }}">‹</span>
+              <span style="width:44px;height:44px;border-radius:999px;border:1px solid {{ lBorder }};background:{{ lSurface }};display:flex;align-items:center;justify-content:center;font-size:20px;color:{{ lText }}">›</span>
+            </div>
+          </div>
+          <div style="margin-top:26px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px">
+            <sc-for list="{{ publicCards }}" as="pc" hint-placeholder-count="3">
+              <div style="background:{{ lSurface }};border:1px solid {{ lBorder }};border-radius:18px;padding:22px 20px 24px;display:flex;flex-direction:column;gap:12px">
+                <div style="width:44px;height:44px;border-radius:12px;background:{{ pc.bg }}"></div>
+                <div style="font-size:{{ pc.titleSize }};font-weight:700;line-height:1.2;letter-spacing:-.015em;color:{{ lText }}">{{ pc.title }}</div>
+                <div style="font-size:{{ pc.bodySize }};line-height:1.5;color:{{ lText }};opacity:.78">{{ pc.body }}</div>
+                <span style="margin-top:auto;font-size:13px;font-weight:600;color:{{ lText }};opacity:.8;border-top:1px solid {{ lBorder }};padding-top:12px">{{ pc.tag }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:22px">
+            <span style="width:34px;height:6px;border-radius:999px;background:{{ lCta }}"></span>
+            <span style="width:14px;height:6px;border-radius:999px;background:{{ lBorder }}"></span>
+            <span style="width:14px;height:6px;border-radius:999px;background:{{ lBorder }}"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+  </x-dc>
+</body>
+</html>
