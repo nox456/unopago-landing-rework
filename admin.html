@@ -71,11 +71,30 @@ class Component extends BaseLogic {
     activeTypeId: 1,
     tediting: null,
     tform: null,
+    palSearch: '',
+    typSearch: '',
+    currentUser: null,
+    authMode: 'login',
+    authEmail: '',
+    authPassword: '',
+    authName: '',
+    authError: '',
     status: ''
   };
 
   componentDidMount() {
     try {
+      let usersRaw = localStorage.getItem('unopago-users-v1');
+      if (!usersRaw) {
+        const defaultUsers = [{ name: 'Administrador', email: 'admin@unopago.com', password: 'admin' }];
+        localStorage.setItem('unopago-users-v1', JSON.stringify(defaultUsers));
+      }
+      let sessionRaw = localStorage.getItem('unopago-session-v1');
+      if (sessionRaw) {
+        const currentUser = JSON.parse(sessionRaw);
+        this.setState({ currentUser });
+      }
+
       const raw = localStorage.getItem('admin-panel-v1');
       if (raw) {
         const d = JSON.parse(raw);
@@ -104,6 +123,67 @@ class Component extends BaseLogic {
       }
     } catch (e) {}
   }
+
+  onAuthEmail = e => this.setState({ authEmail: e.target.value, authError: '' });
+  onAuthPassword = e => this.setState({ authPassword: e.target.value, authError: '' });
+  onAuthName = e => this.setState({ authName: e.target.value, authError: '' });
+
+  switchAuthMode = mode => this.setState({ authMode: mode, authError: '' });
+
+  handleLogin = () => {
+    const email = (this.state.authEmail || '').trim().toLowerCase();
+    const password = (this.state.authPassword || '').trim();
+    if (!email || !password) {
+      this.setState({ authError: 'Ingresa tu correo y contraseña.' });
+      return;
+    }
+    try {
+      const users = JSON.parse(localStorage.getItem('unopago-users-v1') || '[]');
+      const found = users.find(u => (u.email || '').toLowerCase() === email && u.password === password);
+      if (found) {
+        const userSession = { name: found.name, email: found.email };
+        localStorage.setItem('unopago-session-v1', JSON.stringify(userSession));
+        this.setState({ currentUser: userSession, authEmail: '', authPassword: '', authError: '', status: 'Bienvenido, ' + found.name });
+      } else {
+        this.setState({ authError: 'Credenciales incorrectas. (Prueba admin@unopago.com / admin)' });
+      }
+    } catch (e) {
+      this.setState({ authError: 'Error al iniciar sesión.' });
+    }
+  };
+
+  handleRegister = () => {
+    const name = (this.state.authName || '').trim();
+    const email = (this.state.authEmail || '').trim().toLowerCase();
+    const password = (this.state.authPassword || '').trim();
+    if (!name || !email || !password) {
+      this.setState({ authError: 'Por favor completa todos los campos.' });
+      return;
+    }
+    try {
+      const users = JSON.parse(localStorage.getItem('unopago-users-v1') || '[]');
+      if (users.some(u => (u.email || '').toLowerCase() === email)) {
+        this.setState({ authError: 'El correo ya está registrado.' });
+        return;
+      }
+      const newUser = { name, email, password };
+      users.push(newUser);
+      localStorage.setItem('unopago-users-v1', JSON.stringify(users));
+
+      const userSession = { name, email };
+      localStorage.setItem('unopago-session-v1', JSON.stringify(userSession));
+      this.setState({ currentUser: userSession, authName: '', authEmail: '', authPassword: '', authError: '', status: 'Cuenta creada. Bienvenido, ' + name });
+    } catch (e) {
+      this.setState({ authError: 'Error al registrar la cuenta.' });
+    }
+  };
+
+  handleLogout = () => {
+    try {
+      localStorage.removeItem('unopago-session-v1');
+    } catch (e) {}
+    this.setState({ currentUser: null, authEmail: '', authPassword: '', authName: '', authError: '', status: 'Sesión cerrada.' });
+  };
 
   persist(extra) {
     const s = { ...this.state, ...extra };
@@ -220,6 +300,16 @@ class Component extends BaseLogic {
     };
 
     const modePalettes = st.palettes.filter(p => getModeOfPalette(p) === st.paletteMode);
+    const palTerm = (st.palSearch || '').trim().toLowerCase();
+    const filteredPalettes = palTerm
+      ? modePalettes.filter(p => (p.name || '').toLowerCase().includes(palTerm) || (p.note || '').toLowerCase().includes(palTerm))
+      : modePalettes;
+
+    const typTerm = (st.typSearch || '').trim().toLowerCase();
+    const filteredTypes = typTerm
+      ? st.types.filter(t => (t.name || '').toLowerCase().includes(typTerm) || (t.font || '').toLowerCase().includes(typTerm))
+      : st.types;
+
     const activeId = isDarkMode ? st.activeDarkId : st.activeLightId;
     const active = modePalettes.find(x => x.id === activeId) || modePalettes[0] || { colors: isDarkMode ? DEF_COLORS_DARK : DEF_COLORS_LIGHT, name: '—' };
 
@@ -238,8 +328,8 @@ class Component extends BaseLogic {
       return { form: { ...s.form, colors } };
     });
 
-    const pal = this.pager(modePalettes.length, st.palPage, i => this.setState({ palPage: i }));
-    const typ = this.pager(st.types.length, st.typPage, i => this.setState({ typPage: i }));
+    const pal = this.pager(filteredPalettes.length, st.palPage, i => this.setState({ palPage: i }));
+    const typ = this.pager(filteredTypes.length, st.typPage, i => this.setState({ typPage: i }));
 
     const tab = active => ({
       border: active ? '0' : '1px solid rgba(15,23,42,.14)',
@@ -335,10 +425,37 @@ class Component extends BaseLogic {
         ? (st.tediting === 'new' ? 'Nueva tipografía en edición' : 'Tipografía en edición')
         : 'Tipografía cargada en el sitio: “' + activeType.name + '”',
 
+      isAuthenticated: !!st.currentUser,
+      isUnauthenticated: !st.currentUser,
+      currentUserName: st.currentUser ? st.currentUser.name : '',
+      currentUserEmail: st.currentUser ? st.currentUser.email : '',
+      logout: () => this.handleLogout(),
+
+      isAuthLogin: st.authMode === 'login',
+      isAuthRegister: st.authMode === 'register',
+      goAuthLogin: () => this.switchAuthMode('login'),
+      goAuthRegister: () => this.switchAuthMode('register'),
+
+      authEmail: st.authEmail,
+      authPassword: st.authPassword,
+      authName: st.authName,
+      authError: st.authError,
+
+      onAuthEmail: this.onAuthEmail,
+      onAuthPassword: this.onAuthPassword,
+      onAuthName: this.onAuthName,
+      submitAuth: () => st.authMode === 'login' ? this.handleLogin() : this.handleRegister(),
+      onAuthKey: e => { if (e.key === 'Enter') st.authMode === 'login' ? this.handleLogin() : this.handleRegister(); },
+
+      palSearch: st.palSearch || '',
+      onPalSearch: e => this.setState({ palSearch: e.target.value, palPage: 0 }),
+      typSearch: st.typSearch || '',
+      onTypSearch: e => this.setState({ typSearch: e.target.value, typPage: 0 }),
+
       previewNote: form
         ? (st.editing === 'new' ? 'Vista previa de la nueva paleta (' + (isDarkMode ? 'Modo Oscuro' : 'Modo Claro') + ') en edición.' : 'Vista previa de la paleta en edición.')
         : 'Paleta cargada para ' + (isDarkMode ? 'Modo Oscuro' : 'Modo Claro') + ': “' + active.name + '”.',
-      palettePage: modePalettes.slice(pal.cur * PER_PAGE, pal.cur * PER_PAGE + PER_PAGE).map(p => {
+      palettePage: filteredPalettes.slice(pal.cur * PER_PAGE, pal.cur * PER_PAGE + PER_PAGE).map(p => {
         const isActive = p.id === activeId;
         const editing = st.editing === p.id;
         const pMode = getModeOfPalette(p);
@@ -416,7 +533,7 @@ class Component extends BaseLogic {
         { label: 'Subtítulos (h3 / h4)', hint: 'Encabezados de sección', value: cur.h3, onChange: e => num('h3', e.target.value), inc: () => num('h3', cur.h3 + 1), dec: () => num('h3', cur.h3 - 1) },
         { label: 'Párrafos (p)', hint: 'Texto de cuerpo y botones', value: cur.p, onChange: e => num('p', e.target.value), inc: () => num('p', cur.p + 1), dec: () => num('p', cur.p - 1) }
       ],
-      typePage: st.types.slice(typ.cur * PER_PAGE, typ.cur * PER_PAGE + PER_PAGE).map(t => {
+      typePage: filteredTypes.slice(typ.cur * PER_PAGE, typ.cur * PER_PAGE + PER_PAGE).map(t => {
         const isActive = t.id === st.activeTypeId;
         const editing = st.tediting === t.id;
         if (t.face && t.family) this.injectFace(t.face, t.family);
@@ -481,13 +598,76 @@ class Component extends BaseLogic {
 <body>
   <x-dc>
 
+<sc-if value="{{ isUnauthenticated }}" hint-placeholder-val="{{ true }}">
+  <!-- Formulario de Iniciar Sesión / Registro -->
+  <div style="min-height:100vh;background:#0f172a;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;font-family:Archivo,sans-serif">
+    <div style="background:#fff;width:100%;max-width:440px;border-radius:20px;padding:36px 32px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.35)">
+      <div style="text-align:center;margin-bottom:28px">
+        <div style="font-size:26px;font-weight:800;letter-spacing:-.03em;color:#0f172a">UnoPago Admin</div>
+        <div style="font-size:14px;color:rgba(15,23,42,.6);margin-top:6px">Acceso al Panel de Control de Identidad</div>
+      </div>
+
+      <!-- Pestañas de Login / Registro -->
+      <div style="display:flex;background:#f1f5f9;border-radius:12px;padding:4px;margin-bottom:24px">
+        <button sc-camel-on-click="{{ goAuthLogin }}" style="flex:1;border:0;border-radius:10px;padding:10px;font:600 14px Archivo,sans-serif;cursor:pointer;transition:all .2s;background:{{ isAuthLogin ? '#0f172a' : 'transparent' }};color:{{ isAuthLogin ? '#fff' : '#64748b' }}">Iniciar Sesión</button>
+        <button sc-camel-on-click="{{ goAuthRegister }}" style="flex:1;border:0;border-radius:10px;padding:10px;font:600 14px Archivo,sans-serif;cursor:pointer;transition:all .2s;background:{{ isAuthRegister ? '#0f172a' : 'transparent' }};color:{{ isAuthRegister ? '#fff' : '#64748b' }}">Registrarse</button>
+      </div>
+
+      <!-- Alerta de error -->
+      <sc-if value="{{ authError }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;padding:12px 14px;border-radius:10px;font-size:13px;margin-bottom:18px;line-height:1.4">
+          {{ authError }}
+        </div>
+      </sc-if>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <sc-if value="{{ isAuthRegister }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;color:#334155;margin-bottom:6px">Nombre completo</label>
+            <input type="text" value="{{ authName }}" sc-camel-on-change="{{ onAuthName }}" sc-camel-on-key-down="{{ onAuthKey }}" placeholder="Ej. Carlos Mendoza" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;outline:none">
+          </div>
+        </sc-if>
+
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#334155;margin-bottom:6px">Correo electrónico</label>
+          <input type="email" value="{{ authEmail }}" sc-camel-on-change="{{ onAuthEmail }}" sc-camel-on-key-down="{{ onAuthKey }}" placeholder="admin@unopago.com" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;outline:none">
+        </div>
+
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#334155;margin-bottom:6px">Contraseña</label>
+          <input type="password" value="{{ authPassword }}" sc-camel-on-change="{{ onAuthPassword }}" sc-camel-on-key-down="{{ onAuthKey }}" placeholder="••••••••" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;outline:none">
+        </div>
+
+        <button sc-camel-on-click="{{ submitAuth }}" style="background:#4B51F6;color:#fff;border:0;border-radius:10px;padding:14px;font:600 15px Archivo,sans-serif;cursor:pointer;margin-top:8px;transition:background .2s" style-hover="background:#3b40c6">
+          {{ isAuthLogin ? 'Ingresar al Panel' : 'Crear Cuenta e Ingresar' }}
+        </button>
+      </div>
+
+      <sc-if value="{{ isAuthLogin }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b;text-align:center">
+          💡 Usuario por defecto: <strong>admin@unopago.com</strong> / Contraseña: <strong>admin</strong>
+        </div>
+      </sc-if>
+
+      <div style="margin-top:16px;text-align:center">
+        <a href="index.html" style="font-size:13px;color:#64748b;text-decoration:none">← Volver a la Landing pública</a>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isAuthenticated }}" hint-placeholder-val="{{ true }}">
 <div style="min-height:100vh;background:#eef1f6;color:#0f172a;padding:0 0 60px">
 
   <header style="background:#0f172a;color:#fff;padding:20px 34px;display:flex;align-items:center;gap:26px;flex-wrap:wrap">
     <div style="font-size:24px;font-weight:800;letter-spacing:-.02em">Panel de Administración</div>
     <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:6px 12px;white-space:nowrap;flex:none">Evaluación 1</span>
     <span style="flex:1 1 0;min-width:0"></span>
-    <a href="index.html" style="color:#fff;background:rgba(255,255,255,.14);padding:8px 16px;border-radius:999px;font-size:14px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px">← Ver Sitio Público</a>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-size:14px;color:rgba(255,255,255,.8);background:rgba(255,255,255,.08);padding:6px 14px;border-radius:999px">👤 {{ currentUserName }}</span>
+      <button sc-camel-on-click="{{ logout }}" style="background:rgba(239,68,68,.18);color:#fca5a5;border:1px solid rgba(239,68,68,.3);padding:8px 16px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">Cerrar Sesión</button>
+      <a href="index.html" style="color:#fff;background:rgba(255,255,255,.14);padding:8px 16px;border-radius:999px;font-size:14px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px">← Ver Sitio Público</a>
+    </div>
     <span style="font-size:14px;color:rgba(255,255,255,.6);flex:0 1 auto;min-width:0">{{ statusText }}</span>
   </header>
 
@@ -547,6 +727,9 @@ class Component extends BaseLogic {
     <section style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;padding:26px">
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px">
         <h2 style="margin:0;font-size:21px;font-weight:700;letter-spacing:-.02em">Paletas guardadas ({{ modeTitle }})</h2>
+        <div style="position:relative;flex:1 1 200px;max-width:300px">
+          <input type="text" value="{{ palSearch }}" sc-camel-on-change="{{ onPalSearch }}" placeholder="🔍 Buscar paleta por nombre..." style="width:100%;box-sizing:border-box;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:10px 14px;font:500 14px Archivo,sans-serif;color:#0f172a;background:#f8fafc;outline:none">
+        </div>
         <span style="flex:1 1 0;min-width:0"></span>
         <button sc-camel-on-click="{{ togglePaletteMode }}" style="{{ modeBtnStyle }}">{{ modeBtnText }}</button>
         <button sc-camel-on-click="{{ startNew }}" style="background:#0f172a;color:#fff;border:0;border-radius:10px;padding:12px 22px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap;transition:background .2s" style-hover="background:#4B51F6">+ Nueva paleta ({{ modeTitle }})</button>
@@ -667,6 +850,9 @@ class Component extends BaseLogic {
     <section style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;padding:26px">
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px">
         <h2 style="margin:0;font-size:21px;font-weight:700;letter-spacing:-.02em">Tipografías / estilos guardados</h2>
+        <div style="position:relative;flex:1 1 200px;max-width:300px">
+          <input type="text" value="{{ typSearch }}" sc-camel-on-change="{{ onTypSearch }}" placeholder="🔍 Buscar tipografía por nombre..." style="width:100%;box-sizing:border-box;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:10px 14px;font:500 14px Archivo,sans-serif;color:#0f172a;background:#f8fafc;outline:none">
+        </div>
         <span style="flex:1 1 0;min-width:0"></span>
         <button sc-camel-on-click="{{ startNewType }}" style="background:#0f172a;color:#fff;border:0;border-radius:10px;padding:12px 22px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap;transition:background .2s" style-hover="background:#4B51F6">+ Nueva tipografía</button>
       </div>
@@ -843,8 +1029,8 @@ class Component extends BaseLogic {
     </div>
   </section>
 </div>
+</sc-if>
 
   </x-dc>
 </body>
 </html>
->>>>>>> 18135e87c5d857869640a10558034dc13ba3ae1d

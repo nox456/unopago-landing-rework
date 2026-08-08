@@ -55,11 +55,30 @@ class Component extends BaseLogic {
     activeTypeId: 1,
     tediting: null,
     tform: null,
+    palSearch: '',
+    typSearch: '',
+    currentUser: null,
+    authMode: 'login',
+    authEmail: '',
+    authPassword: '',
+    authName: '',
+    authError: '',
     status: ''
   };
 
   componentDidMount() {
     try {
+      let usersRaw = localStorage.getItem('unopago-users-v1');
+      if (!usersRaw) {
+        const defaultUsers = [{ name: 'Administrador', email: 'admin@unopago.com', password: 'admin' }];
+        localStorage.setItem('unopago-users-v1', JSON.stringify(defaultUsers));
+      }
+      let sessionRaw = localStorage.getItem('unopago-session-v1');
+      if (sessionRaw) {
+        const currentUser = JSON.parse(sessionRaw);
+        this.setState({ currentUser });
+      }
+
       const raw = localStorage.getItem('admin-panel-v1');
       if (raw) {
         const d = JSON.parse(raw);
@@ -88,6 +107,67 @@ class Component extends BaseLogic {
       }
     } catch (e) {}
   }
+
+  onAuthEmail = e => this.setState({ authEmail: e.target.value, authError: '' });
+  onAuthPassword = e => this.setState({ authPassword: e.target.value, authError: '' });
+  onAuthName = e => this.setState({ authName: e.target.value, authError: '' });
+
+  switchAuthMode = mode => this.setState({ authMode: mode, authError: '' });
+
+  handleLogin = () => {
+    const email = (this.state.authEmail || '').trim().toLowerCase();
+    const password = (this.state.authPassword || '').trim();
+    if (!email || !password) {
+      this.setState({ authError: 'Ingresa tu correo y contraseña.' });
+      return;
+    }
+    try {
+      const users = JSON.parse(localStorage.getItem('unopago-users-v1') || '[]');
+      const found = users.find(u => (u.email || '').toLowerCase() === email && u.password === password);
+      if (found) {
+        const userSession = { name: found.name, email: found.email };
+        localStorage.setItem('unopago-session-v1', JSON.stringify(userSession));
+        this.setState({ currentUser: userSession, authEmail: '', authPassword: '', authError: '', status: 'Bienvenido, ' + found.name });
+      } else {
+        this.setState({ authError: 'Credenciales incorrectas. (Prueba admin@unopago.com / admin)' });
+      }
+    } catch (e) {
+      this.setState({ authError: 'Error al iniciar sesión.' });
+    }
+  };
+
+  handleRegister = () => {
+    const name = (this.state.authName || '').trim();
+    const email = (this.state.authEmail || '').trim().toLowerCase();
+    const password = (this.state.authPassword || '').trim();
+    if (!name || !email || !password) {
+      this.setState({ authError: 'Por favor completa todos los campos.' });
+      return;
+    }
+    try {
+      const users = JSON.parse(localStorage.getItem('unopago-users-v1') || '[]');
+      if (users.some(u => (u.email || '').toLowerCase() === email)) {
+        this.setState({ authError: 'El correo ya está registrado.' });
+        return;
+      }
+      const newUser = { name, email, password };
+      users.push(newUser);
+      localStorage.setItem('unopago-users-v1', JSON.stringify(users));
+
+      const userSession = { name, email };
+      localStorage.setItem('unopago-session-v1', JSON.stringify(userSession));
+      this.setState({ currentUser: userSession, authName: '', authEmail: '', authPassword: '', authError: '', status: 'Cuenta creada. Bienvenido, ' + name });
+    } catch (e) {
+      this.setState({ authError: 'Error al registrar la cuenta.' });
+    }
+  };
+
+  handleLogout = () => {
+    try {
+      localStorage.removeItem('unopago-session-v1');
+    } catch (e) {}
+    this.setState({ currentUser: null, authEmail: '', authPassword: '', authName: '', authError: '', status: 'Sesión cerrada.' });
+  };
 
   persist(extra) {
     const s = { ...this.state, ...extra };
@@ -204,6 +284,16 @@ class Component extends BaseLogic {
     };
 
     const modePalettes = st.palettes.filter(p => getModeOfPalette(p) === st.paletteMode);
+    const palTerm = (st.palSearch || '').trim().toLowerCase();
+    const filteredPalettes = palTerm
+      ? modePalettes.filter(p => (p.name || '').toLowerCase().includes(palTerm) || (p.note || '').toLowerCase().includes(palTerm))
+      : modePalettes;
+
+    const typTerm = (st.typSearch || '').trim().toLowerCase();
+    const filteredTypes = typTerm
+      ? st.types.filter(t => (t.name || '').toLowerCase().includes(typTerm) || (t.font || '').toLowerCase().includes(typTerm))
+      : st.types;
+
     const activeId = isDarkMode ? st.activeDarkId : st.activeLightId;
     const active = modePalettes.find(x => x.id === activeId) || modePalettes[0] || { colors: isDarkMode ? DEF_COLORS_DARK : DEF_COLORS_LIGHT, name: '—' };
 
@@ -222,8 +312,8 @@ class Component extends BaseLogic {
       return { form: { ...s.form, colors } };
     });
 
-    const pal = this.pager(modePalettes.length, st.palPage, i => this.setState({ palPage: i }));
-    const typ = this.pager(st.types.length, st.typPage, i => this.setState({ typPage: i }));
+    const pal = this.pager(filteredPalettes.length, st.palPage, i => this.setState({ palPage: i }));
+    const typ = this.pager(filteredTypes.length, st.typPage, i => this.setState({ typPage: i }));
 
     const tab = active => ({
       border: active ? '0' : '1px solid rgba(15,23,42,.14)',
@@ -319,10 +409,34 @@ class Component extends BaseLogic {
         ? (st.tediting === 'new' ? 'Nueva tipografía en edición' : 'Tipografía en edición')
         : 'Tipografía cargada en el sitio: “' + activeType.name + '”',
 
-      previewNote: form
-        ? (st.editing === 'new' ? 'Vista previa de la nueva paleta (' + (isDarkMode ? 'Modo Oscuro' : 'Modo Claro') + ') en edición.' : 'Vista previa de la paleta en edición.')
-        : 'Paleta cargada para ' + (isDarkMode ? 'Modo Oscuro' : 'Modo Claro') + ': “' + active.name + '”.',
-      palettePage: modePalettes.slice(pal.cur * PER_PAGE, pal.cur * PER_PAGE + PER_PAGE).map(p => {
+      isAuthenticated: !!st.currentUser,
+      isUnauthenticated: !st.currentUser,
+      currentUserName: st.currentUser ? st.currentUser.name : '',
+      currentUserEmail: st.currentUser ? st.currentUser.email : '',
+      logout: () => this.handleLogout(),
+
+      isAuthLogin: st.authMode === 'login',
+      isAuthRegister: st.authMode === 'register',
+      goAuthLogin: () => this.switchAuthMode('login'),
+      goAuthRegister: () => this.switchAuthMode('register'),
+
+      authEmail: st.authEmail,
+      authPassword: st.authPassword,
+      authName: st.authName,
+      authError: st.authError,
+
+      onAuthEmail: this.onAuthEmail,
+      onAuthPassword: this.onAuthPassword,
+      onAuthName: this.onAuthName,
+      submitAuth: () => st.authMode === 'login' ? this.handleLogin() : this.handleRegister(),
+      onAuthKey: e => { if (e.key === 'Enter') st.authMode === 'login' ? this.handleLogin() : this.handleRegister(); },
+
+      palSearch: st.palSearch || '',
+      onPalSearch: e => this.setState({ palSearch: e.target.value, palPage: 0 }),
+      typSearch: st.typSearch || '',
+      onTypSearch: e => this.setState({ typSearch: e.target.value, typPage: 0 }),
+
+      palettePage: filteredPalettes.slice(pal.cur * PER_PAGE, pal.cur * PER_PAGE + PER_PAGE).map(p => {
         const isActive = p.id === activeId;
         const editing = st.editing === p.id;
         const pMode = getModeOfPalette(p);
@@ -400,7 +514,7 @@ class Component extends BaseLogic {
         { label: 'Subtítulos (h3 / h4)', hint: 'Encabezados de sección', value: cur.h3, onChange: e => num('h3', e.target.value), inc: () => num('h3', cur.h3 + 1), dec: () => num('h3', cur.h3 - 1) },
         { label: 'Párrafos (p)', hint: 'Texto de cuerpo y botones', value: cur.p, onChange: e => num('p', e.target.value), inc: () => num('p', cur.p + 1), dec: () => num('p', cur.p - 1) }
       ],
-      typePage: st.types.slice(typ.cur * PER_PAGE, typ.cur * PER_PAGE + PER_PAGE).map(t => {
+      typePage: filteredTypes.slice(typ.cur * PER_PAGE, typ.cur * PER_PAGE + PER_PAGE).map(t => {
         const isActive = t.id === st.activeTypeId;
         const editing = st.tediting === t.id;
         if (t.face && t.family) this.injectFace(t.face, t.family);

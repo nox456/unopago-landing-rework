@@ -20,7 +20,11 @@ UnoPago es una plataforma web moderna diseñada para la gestión de pagos, cobro
 - **Botón Flotante de Ayuda**: Acceso rápido fijo a soporte en la esquina inferior derecha.
 - **Sincronización Dinámica de Tema y Tipografía**: Lee automáticamente las paletas (Modo Claro / Modo Oscuro) y la tipografía activa desde el Panel de Administración.
 
-### ⚙️ Panel de Administración (`admin.html`)
+- **🔑 Módulo de Autenticación y Control de Sesión**:
+  - Acceso protegido al panel con formulario de **Iniciar Sesión** y **Registro de Usuarios**.
+  - Persistencia de credenciales y sesión activa en `localStorage` (`unopago-users-v1` y `unopago-session-v1`).
+  - Usuario administrador predeterminado (`admin@unopago.com` / `admin`).
+- **🔍 Barras de Búsqueda Integradas**: Filtrado en tiempo real por nombre para paletas de colores y estilos tipográficos.
 - **Módulo 1: Gestión de Colores**
   - **División por Modo Claro y Modo Oscuro**: Alternador dedicado para visualizar y gestionar independientemente las paletas de cada modo.
   - **Creación y Edición de Paletas**: Formulario intuitivo con color pickers e inputs de código HEX para definir los 5 roles de color.
