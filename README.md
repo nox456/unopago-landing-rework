@@ -9,7 +9,7 @@ UnoPago es una plataforma web moderna diseñada para la gestión de pagos, cobro
 
 ## 🚀 Características Principales
 
-### 🌐 Landing Page Pública (`index.html` / `landing.html`)
+### 🌐 Landing Page Pública (`landing.html`)
 - **Diseño Moderno y Accesible**: Basado en una estricta distribución de 5 roles de color (Jerarquía 60-30-10):
   1. **Color Dominante (60%)**: Fondo principal (`<body>`).
   2. **Color de Superficie (20%)**: Cards, contenedores y header.
@@ -42,8 +42,8 @@ UnoPago es una plataforma web moderna diseñada para la gestión de pagos, cobro
 
 ```
 unopago-landing-rework/
-├── index.html            # Entrypoint principal de la Landing Page pública
-├── landing.html          # Vista / Réplica pública de la Landing Page
+├── index.html            # Redirección al portafolio (https://portfolio-aqs8.onrender.com)
+├── landing.html          # Entrypoint principal de la Landing Page pública
 ├── admin.html            # Panel de Administración de Colores y Tipografías
 ├── css/
 │   ├── landing.css       # Estilos específicos de la Landing Page
@@ -75,7 +75,8 @@ unopago-landing-rework/
 
 2. **Ejecutar el proyecto:**
    - No requiere procesos de compilación o instalación de `node_modules` para su uso en navegador.
-   - Abre directamente `index.html` en tu navegador de preferencia o sírvelo mediante un servidor local (ej. Live Server).
+   - Abre directamente `landing.html` en tu navegador de preferencia o sírvelo mediante un servidor local (ej. Live Server).
+   - Nota: `index.html` ya no contiene la Landing Page; redirige al portafolio desplegado en https://portfolio-aqs8.onrender.com
    - Accede a `admin.html` para personalizar los temas, paletas y fuentes del sitio.
 
 ---

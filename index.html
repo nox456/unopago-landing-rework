@@ -1,187 +1,27 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta http-equiv="refresh" content="0; url=https://portfolio-aqs8.onrender.com">
+<link rel="canonical" href="https://portfolio-aqs8.onrender.com">
+<title>Redirecting…</title>
+<script>
+  window.location.replace("https://portfolio-aqs8.onrender.com");
+</script>
 <style>
-  /* Must stay in <head>: the browser resolves the cross-document opt-in at the
-     incoming page's first render opportunity, before <helmet> styles are mounted. */
-  @view-transition { navigation: auto; }
-  ::view-transition-group(*) { animation-duration: 180ms; animation-timing-function: cubic-bezier(.4,0,.2,1); }
-  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 180ms; }
+  html, body { margin:0; height:100%; background:#0f1113; color:#c9cdd2;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  main { height:100%; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:12px; text-align:center; padding:24px; }
+  a { color:#e6893f; }
 </style>
-<script src="./support.js"></script>
 </head>
 <body>
-<x-dc>
-<helmet>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
-<style>
-  html, body { margin:0; padding:0; background:#0f1113; overflow:hidden; }
-  a { color:#e6893f; text-decoration:none; }
-  a:hover { color:#f2a768; }
-  @keyframes blink { 0%,49% { opacity:1 } 50%,100% { opacity:0 } }
-  @keyframes lineIn { from { opacity:0; transform:translateY(4px) } to { opacity:1; transform:none } }
-</style>
-</helmet>
-<div style="height:100vh;width:100%;background:#0f1113;box-sizing:border-box;padding:22px;font-family:'JetBrains Mono',ui-monospace,monospace;overflow:hidden">
-  <div style="height:100%;box-sizing:border-box;background:#17191c;border-radius:26px;display:flex;flex-direction:column;padding:34px clamp(28px,4vw,64px) 30px;overflow:hidden;view-transition-name:shell">
-
-    <header style="display:flex;align-items:center;justify-content:space-between;gap:32px;flex:0 0 auto;view-transition-name:topbar">
-      <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;letter-spacing:-0.02em;color:#f5f3f0">Portfolio<span style="color:#e6893f">.</span></div>
-      <nav style="display:flex;gap:34px;font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:17px;color:#e8e5e1;margin-left:auto">
-        <a href="Portfolio%20Experience.dc.html" onClick="{{ goExperience }}" style="color:#e8e5e1" style-hover="color:#e6893f">Experience</a>
-        <a href="Portfolio%20Projects.dc.html" onClick="{{ goProjects }}" style="color:#e8e5e1" style-hover="color:#e6893f">Projects</a>
-        <a href="Portfolio%20Skills.dc.html" onClick="{{ goSkills }}" style="color:#e8e5e1" style-hover="color:#e6893f">Skills</a>
-      </nav>
-    </header>
-
-    <div style="width:70px;height:3px;background:#e6893f;margin:clamp(14px,3.5vh,38px) 0 0;flex:0 0 auto;view-transition-name:rule"></div>
-
-    <main style="flex:1 1 auto;min-height:0;display:flex;align-items:flex-start;justify-content:space-between;gap:clamp(24px,5vw,80px);padding-top:clamp(10px,3vh,40px);overflow:hidden">
-
-      <div style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:clamp(5px,1.4vh,18px);font-size:clamp(10px,min(1.05vw,1.9vh),15px);line-height:1.5;color:#c9cdd2">
-
-        <sc-if value="{{ showWelcomePrompt }}" hint-placeholder-val="{{ true }}">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;view-transition-name:prompt">
-            <span style="color:#7fc98a;font-weight:700">visitor@gabrielvieira.dev</span><span style="color:#5f6b76">:~$</span><span style="color:#f5f3f0">{{ cmd1 }}</span>
-            <sc-if value="{{ cursor1 }}" hint-placeholder-val="{{ false }}">
-              <span style="display:inline-block;width:0.6em;height:1.05em;background:#e6893f;animation:blink 1.05s steps(1) infinite;transform:translateY(2px)"></span>
-            </sc-if>
-          </div>
-        </sc-if>
-
-        <sc-if value="{{ showName }}" hint-placeholder-val="{{ true }}">
-          <div style="display:flex;flex-direction:column;gap:clamp(5px,1.4vh,18px);animation:lineIn 320ms ease-out both">
-            <pre style="margin:0;color:#e6893f;font-size:clamp(5px,min(0.78vw,1.35vh),11px);line-height:1.12;font-weight:700;letter-spacing:0;white-space:pre;overflow:hidden"> ██████╗  █████╗ ██████╗ ██████╗ ██╗███████╗██╗     
-██╔════╝ ██╔══██╗██╔══██╗██╔══██╗██║██╔════╝██║     
-██║  ███╗███████║██████╔╝██████╔╝██║█████╗  ██║     
-██║   ██║██╔══██║██╔══██╗██╔══██╗██║██╔══╝  ██║     
-╚██████╔╝██║  ██║██████╔╝██║  ██║██║███████╗███████╗
- ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝╚═╝╚══════╝╚══════╝
-██╗   ██╗██╗███████╗██╗██████╗  █████╗ 
-██║   ██║██║██╔════╝██║██╔══██╗██╔══██╗
-██║   ██║██║█████╗  ██║██████╔╝███████║
-╚██╗ ██╔╝██║██╔══╝  ██║██╔══██╗██╔══██║
- ╚████╔╝ ██║███████╗██║██║  ██║██║  ██║
-  ╚═══╝  ╚═╝╚══════╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝</pre>
-            <div style="display:flex;align-items:center;column-gap:clamp(10px,1.4vw,20px);row-gap:6px;flex-wrap:wrap;color:#c9cdd2;font-size:clamp(11px,min(1.05vw,1.9vh),15px)">
-              <span style="display:flex;align-items:center;gap:8px">☕️ Coffee</span>
-              <span style="color:#3a4149">/</span>
-              <span style="display:flex;align-items:center;gap:8px"><img src="uploads/Neovim-mark.svg.png" alt="" style="height:1.15em;width:auto;display:block" />Neovim</span>
-              <span style="color:#3a4149">/</span>
-              <span style="display:flex;align-items:center;gap:8px">💻 Coding</span>
-            </div>
-          </div>
-        </sc-if>
-
-        <sc-if value="{{ showAboutPrompt }}" hint-placeholder-val="{{ true }}">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline">
-            <span style="color:#7fc98a;font-weight:700">visitor@gabrielvieira.dev</span><span style="color:#5f6b76">:~$</span><span style="color:#f5f3f0">{{ cmd2 }}</span>
-            <sc-if value="{{ cursor2 }}" hint-placeholder-val="{{ false }}">
-              <span style="display:inline-block;width:0.6em;height:1.05em;background:#e6893f;animation:blink 1.05s steps(1) infinite;transform:translateY(2px)"></span>
-            </sc-if>
-          </div>
-        </sc-if>
-
-        <sc-if value="{{ showAbout }}" hint-placeholder-val="{{ true }}">
-          <div style="display:flex;flex-direction:column;gap:clamp(3px,0.8vh,10px);max-width:62ch;animation:lineIn 320ms ease-out both">
-            <div>Hi, my name is <span style="color:#e6893f;font-weight:700">Gabriel Vieira</span>.</div>
-            <div>I'm a <span style="color:#7ea9d8;font-weight:700">full-stack developer</span> and Computer Engineering student.</div>
-            <div>Passionate about <span style="color:#7fc98a">Linux</span> and <span style="color:#7fc98a">open source</span>.</div>
-          </div>
-        </sc-if>
-
-        <sc-if value="{{ showExitPrompt }}" hint-placeholder-val="{{ false }}">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline">
-            <span style="color:#7fc98a;font-weight:700">visitor@gabrielvieira.dev</span><span style="color:#5f6b76">:~$</span><span style="color:#f5f3f0">{{ cmd3 }}</span>
-            <span style="display:inline-block;width:0.6em;height:1.05em;background:#e6893f;animation:blink 1.05s steps(1) infinite;transform:translateY(2px)"></span>
-          </div>
-        </sc-if>
-      </div><div style="flex: 0 0 auto; align-self: center; display: flex; align-items: center; justify-content: center; margin: 0 clamp(8px,3vw,80px) clamp(170px,4vh,50px) 0">
-        <img src="uploads/profile_pixel.webp" alt="Pixel art prism" style="width:clamp(130px,min(19vw,36vh),380px);height:clamp(130px,min(19vw,36vh),380px);object-fit:cover;border-radius:50%;image-rendering:pixelated;display:block;transition:opacity 420ms ease;opacity:{{ avatarOpacity }}" />
-      </div>
-
-    </main>
-
-    <footer style="flex:0 0 auto;display:flex;align-items:center;gap:16px;padding-top:clamp(10px,2vh,22px);border-top:1px solid #262a2e;font-size:13px;color:#5f6b76;view-transition-name:bottombar">
-      <span style="color:#8b949e;white-space:nowrap">Let's connect!</span>
-      <span style="color:#3a4149">—</span>
-      <a href="https://github.com/nox456" aria-label="GitHub" title="github.com/nox456" style="display:flex;align-items:center;opacity:0.65" style-hover="opacity:1"><img src="https://cdn.simpleicons.org/github/8b949e" alt="GitHub" style="width:18px;height:18px;display:block" /></a>
-      <a href="mailto:nox030705@gmail.com" aria-label="Email" title="nox030705@gmail.com" style="display:flex;align-items:center;opacity:0.65" style-hover="opacity:1"><img src="https://cdn.simpleicons.org/gmail/8b949e" alt="Gmail" style="width:18px;height:18px;display:block" /></a>
-    </footer>
-
-  </div>
-</div>
-</x-dc>
-<script type="text/x-dc" data-dc-script>
-class Component extends DCLogic {
-  state = {
-    cmd1: "", cmd2: "", cmd3: "",
-    showWelcomePrompt: true, showName: false, showAboutPrompt: false,
-    showAbout: false, showExitPrompt: false, leaving: false
-  };
-  timers = [];
-  wait(ms) { return new Promise(r => this.timers.push(setTimeout(r, ms))); }
-  async type(field, text, speed) {
-    for (let i = 1; i <= text.length; i++) {
-      this.setState({ [field]: text.slice(0, i) });
-      await this.wait(speed || 55);
-    }
-  }
-  swallowSkipped = (e) => {
-    const m = e.reason && (e.reason.message || e.reason);
-    if (typeof m === "string" && m.indexOf("Transition was skipped") !== -1) e.preventDefault();
-  };
-  async componentDidMount() {
-    window.addEventListener("unhandledrejection", this.swallowSkipped);
-    await this.wait(160);
-    await this.type("cmd1", "welcome");
-    await this.wait(260);
-    this.setState({ showName: true });
-    await this.wait(620);
-    this.setState({ showAboutPrompt: true });
-    await this.type("cmd2", "about");
-    await this.wait(240);
-    this.setState({ showAbout: true });
-  }
-  componentWillUnmount() {
-    this.timers.forEach(clearTimeout);
-    window.removeEventListener("unhandledrejection", this.swallowSkipped);
-  }
-  leave = async (href, e) => {
-    e.preventDefault();
-    if (this.state.leaving) return;
-    this.setState({ leaving: true, showExitPrompt: true });
-    await this.type("cmd3", "clear", 48);
-    await this.wait(150);
-    this.setState({
-      cmd1: "", showWelcomePrompt: true, showName: false, showAboutPrompt: false,
-      showAbout: false, showExitPrompt: false
-    });
-    await this.wait(80);
-    window.location.href = href;
-  };
-  renderVals() {
-    const s = this.state;
-    return {
-      cmd1: s.cmd1, cmd2: s.cmd2, cmd3: s.cmd3,
-      showWelcomePrompt: s.showWelcomePrompt,
-      showName: s.showName,
-      showAboutPrompt: s.showAboutPrompt,
-      showAbout: s.showAbout,
-      showExitPrompt: s.showExitPrompt,
-      cursor1: !s.showAboutPrompt && !s.showExitPrompt,
-      cursor2: s.showAboutPrompt && !s.showExitPrompt,
-      avatarOpacity: s.showName && !s.leaving ? 0.95 : 0,
-      goProjects: (e) => this.leave("Portfolio%20Projects.dc.html", e),
-      goSkills: (e) => this.leave("Portfolio%20Skills.dc.html", e),
-      goExperience: (e) => this.leave("Portfolio%20Experience.dc.html", e)
-    };
-  }
-}
-</script>
+<main>
+  <p>Redirecting to the portfolio…</p>
+  <p><a href="https://portfolio-aqs8.onrender.com">https://portfolio-aqs8.onrender.com</a></p>
+</main>
 </body>
 </html>
