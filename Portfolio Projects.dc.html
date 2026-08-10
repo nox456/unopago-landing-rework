@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* Must stay in <head>: the browser resolves the cross-document opt-in at the
+     incoming page's first render opportunity, before <helmet> styles are mounted. */
+  @view-transition { navigation: auto; }
+  ::view-transition-group(*) { animation-duration: 180ms; animation-timing-function: cubic-bezier(.4,0,.2,1); }
+  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 180ms; }
+</style>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -17,9 +24,6 @@
   a:hover { color:#f2a768; }
   @keyframes blink { 0%,49% { opacity:1 } 50%,100% { opacity:0 } }
   @keyframes lineIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:none } }
-  @view-transition { navigation: auto; }
-  ::view-transition-group(*) { animation-duration: 180ms; animation-timing-function: cubic-bezier(.4,0,.2,1); }
-  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 180ms; }
 </style>
 </helmet>
 <div style="height:100vh;width:100%;background:#0f1113;box-sizing:border-box;padding:22px;font-family:'JetBrains Mono',ui-monospace,monospace;overflow:hidden">
