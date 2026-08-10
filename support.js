@@ -193,9 +193,15 @@
       return h(Root, { ...defaults, ...entry.propOverrides || {} });
     }
     const ReactDOM = getReactDOM();
-    if (ReactDOM.createRoot)
-      ReactDOM.createRoot(hostEl).render(h(StandaloneRoot));
-    else ReactDOM.render(h(StandaloneRoot), hostEl);
+    if (ReactDOM.createRoot) {
+      const root = ReactDOM.createRoot(hostEl);
+      // Mount synchronously: boot() runs at DOMContentLoaded, and a concurrent
+      // first render can land after the first render opportunity. A cross-document
+      // view transition would then snapshot an empty #dc-root and degrade to a
+      // root-only cross-fade instead of morphing the named groups.
+      if (ReactDOM.flushSync) ReactDOM.flushSync(() => root.render(h(StandaloneRoot)));
+      else root.render(h(StandaloneRoot));
+    } else ReactDOM.render(h(StandaloneRoot), hostEl);
     return rootName;
   }
 
