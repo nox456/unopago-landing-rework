@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin:0; padding:0; background:#0f1113; overflow:hidden; }
+  a { color:#e6893f; text-decoration:none; }
+  a:hover { color:#f2a768; }
+  @keyframes blink { 0%,49% { opacity:1 } 50%,100% { opacity:0 } }
+  @view-transition { navigation: auto; }
+  ::view-transition-group(*) { animation-duration: 180ms; animation-timing-function: cubic-bezier(.4,0,.2,1); }
+  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 180ms; }
+</style>
+</helmet>
+<div style="height:100vh;width:100%;background:#0f1113;box-sizing:border-box;padding:22px;font-family:'JetBrains Mono',ui-monospace,monospace;overflow:hidden">
+  <div style="height:100%;box-sizing:border-box;background:#17191c;border-radius:26px;display:flex;flex-direction:column;padding:34px clamp(28px,4vw,64px) 30px;overflow:hidden;view-transition-name:shell">
+
+    <header style="display:flex;align-items:center;justify-content:space-between;gap:32px;flex:0 0 auto;view-transition-name:topbar">
+      <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;letter-spacing:-0.02em;color:#f5f3f0">Portfolio<span style="color:#e6893f">.</span></div>
+      <nav style="display:flex;gap:34px;font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:17px;color:#e8e5e1;margin-left:auto">
+        <a href="index.html" onClick="{{ goHome }}" style="color:#e8e5e1" style-hover="color:#e6893f">Home</a>
+        <a href="Portfolio%20Experience.dc.html" onClick="{{ goExperience }}" style="color:#e8e5e1" style-hover="color:#e6893f">Experience</a>
+        <a href="Portfolio%20Projects.dc.html" onClick="{{ goProjects }}" style="color:#e8e5e1" style-hover="color:#e6893f">Projects</a>
+        <a href="#skills" style="color:#e6893f">Skills</a>
+      </nav>
+    </header>
+
+    <div style="width:70px;height:3px;background:#e6893f;margin:clamp(14px,3.5vh,38px) 0 0;flex:0 0 auto;view-transition-name:rule"></div>
+
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:20px;flex:0 0 auto;padding-top:clamp(10px,2.5vh,28px);font-size:clamp(11px,min(1vw,1.8vh),15px)">
+      <div style="display:flex;gap:10px;align-items:baseline;white-space:nowrap;min-width:0;overflow:hidden;view-transition-name:prompt">
+        <span style="color:#7fc98a;font-weight:700">visitor@gabrielvieira.dev</span><span style="color:#5f6b76">:~$</span><span style="color:#f5f3f0">{{ cmd }}</span>
+        <span style="display:inline-block;width:0.6em;height:1.05em;background:#e6893f;animation:blink 1.05s steps(1) infinite;transform:translateY(2px)"></span>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;flex:0 0 auto">
+        <button onClick="{{ prev }}" style="background:transparent;border:1px solid #2e3339;color:#c9cdd2;border-radius:8px;width:34px;height:34px;font-family:inherit;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="border-color:#e6893f;color:#e6893f">←</button>
+        <button onClick="{{ next }}" style="background:transparent;border:1px solid #2e3339;color:#c9cdd2;border-radius:8px;width:34px;height:34px;font-family:inherit;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="border-color:#e6893f;color:#e6893f">→</button>
+      </div>
+    </div>
+
+    <main style="flex:1 1 auto;min-height:0;display:flex;align-items:stretch;overflow:hidden;padding-top:clamp(10px,2vh,22px)">
+      <div style="width:100%;min-height:0;overflow:hidden;transition:opacity 320ms ease;opacity:{{ listOpacity }}">
+        <div style="display:flex;align-items:stretch;height:100%;gap:24px;transition:transform 420ms cubic-bezier(.4,0,.2,1);transform:{{ trackTransform }}">
+          <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+            <article style="flex:0 0 calc((100% - 48px) / 3);box-sizing:border-box;height:100%;background:#1c1f23;border:1px solid #262a2e;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:clamp(6px,1.3vh,12px);min-width:0;overflow:hidden">
+
+              <div style="display:flex;align-items:baseline;gap:8px;flex:0 0 auto">
+                <span style="color:#5f6b76;font-size:11px">./</span>
+                <h3 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:clamp(13px,min(1.3vw,2.4vh),19px);font-weight:700;color:#f5f3f0;letter-spacing:-0.01em">{{ g.name }}</h3>
+                <span style="margin-left:auto;color:#5f6b76;font-size:10px">{{ g.count }}</span>
+              </div>
+
+              <div style="height:1px;background:#262a2e;flex:0 0 auto"></div>
+
+              <div style="display:flex;flex-direction:column;gap:clamp(4px,1.1vh,10px);flex:1 1 auto;min-height:0;overflow:hidden">
+                <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="0">
+                  <div style="display:flex;align-items:flex-start;gap:10px;min-width:0">
+                    <span style="flex:0 0 auto;width:22px;height:22px;border-radius:6px;background:#0f1113;border:1px solid #23272b;display:flex;align-items:center;justify-content:center;overflow:hidden">
+                      <sc-if value="{{ it.hasIcon }}" hint-placeholder-val="{{ false }}">
+                        <span role="img" style="width:13px;height:13px;display:block;opacity:0.95;background-repeat:no-repeat;background-position:center;background-size:contain;background-image:{{ it.iconCss }}"></span>
+                      </sc-if>
+                      <sc-if value="{{ it.noIcon }}" hint-placeholder-val="{{ false }}">
+                        <span style="font-size:8px;letter-spacing:0.04em;color:#7d8892;font-weight:700">{{ it.initial }}</span>
+                      </sc-if>
+                    </span>
+                    <div style="min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:1px">
+                      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;min-width:0">
+                        <div style="flex:0 0 auto;font-size:clamp(10px,min(0.85vw,1.6vh),13px);color:#e8e5e1;font-weight:500;white-space:nowrap">{{ it.name }}</div>
+                        <sc-if value="{{ it.hasRepos }}" hint-placeholder-val="{{ false }}">
+                          <span style="margin-left:auto;flex:0 0 auto;font-size:9px;color:#7fc98a;border:1px solid #2a3a30;border-radius:999px;padding:1px 8px;white-space:nowrap">{{ it.repos }}</span>
+                        </sc-if>
+                      </div>
+                      <div style="font-size:clamp(8px,min(0.72vw,1.3vh),11px);line-height:1.45;color:#8b949e;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2">{{ it.desc }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </article>
+          </sc-for>
+        </div>
+      </div>
+    </main>
+
+    <footer style="flex:0 0 auto;display:flex;align-items:center;gap:16px;padding-top:clamp(10px,2vh,22px);border-top:1px solid #262a2e;font-size:13px;color:#5f6b76;view-transition-name:bottombar">
+      <span style="color:#8b949e;white-space:nowrap">Let's connect!</span>
+      <span style="color:#3a4149">—</span>
+      <a href="https://github.com/nox456" aria-label="GitHub" title="github.com/nox456" style="display:flex;align-items:center;opacity:0.65" style-hover="opacity:1"><img src="https://cdn.simpleicons.org/github/8b949e" alt="GitHub" style="width:18px;height:18px;display:block" /></a>
+      <a href="mailto:nox030705@gmail.com" aria-label="Email" title="nox030705@gmail.com" style="display:flex;align-items:center;opacity:0.65" style-hover="opacity:1"><img src="https://cdn.simpleicons.org/gmail/8b949e" alt="Gmail" style="width:18px;height:18px;display:block" /></a>
+      <span style="margin-left:auto;color:#5f6b76;white-space:nowrap">{{ counter }}</span>
+    </footer>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { i: 0, cmd: "", shown: false, leaving: false, langCounts: null };
+  async loadLangCounts() {
+    try {
+      const res = await fetch("https://api.github.com/users/nox456/repos?per_page=100&type=owner");
+      if (!res.ok) return;
+      const repos = await res.json();
+      const counts = {};
+      repos.forEach(r => { if (r.language) counts[r.language] = (counts[r.language] || 0) + 1; });
+      this.setState({ langCounts: counts });
+    } catch (e) { /* offline: badges stay hidden */ }
+  }
+  timers = [];
+  icon(slug, color) { return "https://cdn.simpleicons.org/" + slug + (color ? "/" + color : ""); }
+  get groups() {
+    const g = [
+      {
+        name: "Languages",
+        items: [
+          { name: "TypeScript", ghKey: "TypeScript", icon: this.icon("typescript"), desc: "Main language for web and Node work." },
+          { name: "Go", ghKey: "Go", icon: this.icon("go"), desc: "CLIs, daemons and anything concurrent." },
+          { name: "Lua", ghKey: "Lua", icon: this.icon("lua", "5b6cf0"), desc: "Neovim plugins and editor config." },
+          { name: "Python", ghKey: "Python", icon: this.icon("python"), desc: "Scripting and quick automation." }
+        ]
+      },
+      {
+        name: "Frameworks",
+        items: [
+          { name: "Next.js", icon: this.icon("nextdotjs", "e8e5e1"), desc: "Full-stack React apps, routing and SSR." },
+          { name: "Cobra", icon: this.icon("go"), desc: "Command structure for Go CLIs." }
+        ]
+      },
+      {
+        name: "Services",
+        items: [
+          { name: "AWS", icon: "uploads/aws_dark.svg", desc: "Deploying and hosting cloud workloads." },
+          { name: "Supabase", icon: this.icon("supabase"), desc: "Postgres, auth and storage as a backend." },
+          { name: "Notion", icon: this.icon("notion", "e8e5e1"), desc: "API integrations for project tracking." }
+        ]
+      },
+      {
+        name: "Tools",
+        items: [
+          { name: "Docker", icon: this.icon("docker"), desc: "Reproducible local and CI environments." },
+          { name: "Node.js", icon: this.icon("nodedotjs"), desc: "Runtime behind the JavaScript tooling." },
+          { name: "PostgreSQL", icon: this.icon("postgresql"), desc: "Relational schema design and queries." },
+          { name: "Neovim", icon: this.icon("neovim"), desc: "Daily editor, configured from scratch." },
+          { name: "Linux", icon: this.icon("linux"), desc: "Arch on the desktop, the daily driver." }
+        ]
+      }
+    ];
+    return g.slice().sort((a, b) => b.items.length - a.items.length).map(x => Object.assign({}, x, {
+      count: x.items.length + " items",
+      items: x.items.map(it => {
+        const c = this.state.langCounts && it.ghKey ? this.state.langCounts[it.ghKey] : null;
+        return Object.assign({ initial: "" }, it, {
+          hasIcon: !!it.icon,
+          noIcon: !it.icon,
+          iconCss: it.icon ? `url("${it.icon}")` : "none",
+          hasRepos: !!c,
+          repos: c ? c + (c === 1 ? " repo" : " repos") : ""
+        });
+      })
+    }));
+  }
+  wait(ms) { return new Promise(r => this.timers.push(setTimeout(r, ms))); }
+  async type(field, text, speed) {
+    for (let n = 1; n <= text.length; n++) {
+      this.setState({ [field]: text.slice(0, n) });
+      await this.wait(speed || 55);
+    }
+  }
+  swallowSkipped = (e) => {
+    const m = e.reason && (e.reason.message || e.reason);
+    if (typeof m === "string" && m.indexOf("Transition was skipped") !== -1) e.preventDefault();
+  };
+  async componentDidMount() {
+    window.addEventListener("unhandledrejection", this.swallowSkipped);
+    this.loadLangCounts();
+    await this.wait(160);
+    await this.type("cmd", "ls ~/skills");
+    await this.wait(240);
+    this.setState({ shown: true });
+  }
+  componentWillUnmount() {
+    this.timers.forEach(clearTimeout);
+    window.removeEventListener("unhandledrejection", this.swallowSkipped);
+  }
+  leave = async (href, e) => {
+    e.preventDefault();
+    if (this.state.leaving) return;
+    this.setState({ leaving: true, cmd: "" });
+    await this.type("cmd", "clear", 48);
+    await this.wait(120);
+    this.setState({ shown: false, cmd: "" });
+    await this.wait(80);
+    window.location.href = href;
+  };
+  go = (d) => this.setState(s => {
+    const max = Math.max(0, this.groups.length - 3);
+    return { i: Math.min(max, Math.max(0, s.i + d)) };
+  });
+  renderVals() {
+    const i = this.state.i;
+    const list = this.groups;
+    return {
+      groups: list,
+      cmd: this.state.cmd,
+      listOpacity: this.state.shown ? 1 : 0,
+      trackTransform: `translateX(calc(-1 * ${i} * ((100% - 48px) / 3 + 24px)))`,
+      counter: `${i + 1}–${Math.min(list.length, i + 3)} / ${list.length}`,
+      prev: () => this.go(-1),
+      next: () => this.go(1),
+      goHome: (e) => this.leave("index.html", e),
+      goProjects: (e) => this.leave("Portfolio%20Projects.dc.html", e),
+      goExperience: (e) => this.leave("Portfolio%20Experience.dc.html", e)
+    };
+  }
+}
+</script>
+</body>
+</html>
