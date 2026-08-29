@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UnoPago - Creador de CV</title>
+
+  <!-- Prevenir fetch CORS en protocolo file:// -->
+  <script>window.__resources = window.__resources || {};</script>
+
+  <!-- Tipografía -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Diseño CSS -->
+  <link rel="stylesheet" href="css/cv.css">
+
+  <!-- Librerías JS Vendor -->
+  <script src="js/vendor/react.production.min.js"></script>
+  <script src="js/vendor/react-dom.production.min.js"></script>
+  <script src="js/vendor/dc-runtime.js"></script>
+
+  <!-- Lógica del Creador de CV -->
+  <script src="js/cv.js"></script>
+
+  <!-- Script de configuración interpretado por DC-Runtime -->
+  <script type="text/x-dc" data-dc-script data-props='{"sideColor":{"editor":"color","default":"#33373D","options":["#33373D","#1F2933","#3E4C59","#4B51F6"],"tsType":"string","section":"CV"},"photoShape":{"editor":"enum","default":"circle","options":["circle","rounded","square"],"tsType":"string","section":"CV"}}'>
+const BaseLogic = (typeof DCLogic !== 'undefined' ? DCLogic : (typeof window !== 'undefined' && window.DCLogic ? window.DCLogic : class {}));
+
+class Component extends BaseLogic {
+  constructor(p) {
+    super(p);
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem('unopago-cv-v1') || 'null'); } catch (e) {}
+    if (saved && saved.data) {
+      // Migración: versiones antiguas guardaban las listas como array sin nivel
+      ['skills', 'comps', 'langs'].forEach(k => {
+        if (Array.isArray(saved.data[k])) {
+          const o = {};
+          saved.data[k].forEach(n => o[n] = 'Intermedio');
+          saved.data[k] = o;
+        }
+      });
+    }
+    this.state = (saved && saved.data)
+      ? { step: saved.step || 0, errors: {}, data: saved.data }
+      : { step: 0, errors: {}, data: this.blank() };
+    this.fotoInputRef = React.createRef();
+  }
+
+  blank() {
+    return {
+      nombre: '', apellido: '', titulo: '', email: '', telefono: '', web: '', direccion: '', perfil: '',
+      exp: [{ anios: '', empresa: '', desc: '' }],
+      edu: [{ anios: '', centro: '', titulo: '' }],
+      skills: {}, comps: {}, langs: {}, skillInput: '', foto: ''
+    };
+  }
+
+  componentDidUpdate() {
+    try {
+      localStorage.setItem('unopago-cv-v1', JSON.stringify({ step: this.state.step, data: this.state.data }));
+    } catch (e) {}
+  }
+
+  set(patch) {
+    this.setState(s => ({ data: Object.assign({}, s.data, patch), errors: {} }));
+  }
+
+  field(k) {
+    return e => this.set({ [k]: e.target.value });
+  }
+
+  validate(step) {
+    const d = this.state.data, e = {};
+    const t = v => (v || '').trim();
+    if (step === 0) {
+      if (!t(d.nombre)) e.nombre = 'Escribe tu nombre';
+      if (!t(d.apellido)) e.apellido = 'Escribe tu apellido';
+      if (!t(d.titulo)) e.titulo = 'Escribe o elige un título profesional';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(t(d.email))) e.email = 'Correo no válido';
+      if (t(d.telefono) && d.telefono.replace(/\D/g, '').length < 7) e.telefono = 'Teléfono no válido';
+    }
+    if (step === 1 && t(d.perfil).length < 20) e.perfil = 'Cuéntanos un poco más (mínimo 20 caracteres)';
+    if (step === 2) {
+      if (!d.exp.some(r => t(r.empresa))) e.exp = 'Agrega al menos una experiencia (años y empresa)';
+      d.exp.forEach((r, i) => {
+        if ((t(r.empresa) || t(r.desc)) && !t(r.anios)) e['exp' + i] = 'Indica los años (ej: 2019 - 2023)';
+        else if (t(r.anios) && !t(r.empresa)) e['exp' + i] = 'Indica la empresa';
+      });
+    }
+    if (step === 3) {
+      if (!d.edu.some(r => t(r.centro))) e.edu = 'Agrega al menos una formación';
+      d.edu.forEach((r, i) => {
+        if ((t(r.centro) || t(r.titulo)) && !t(r.anios)) e['edu' + i] = 'Indica los años';
+        else if (t(r.anios) && !t(r.centro)) e['edu' + i] = 'Indica el centro de estudios';
+      });
+    }
+    if (step === 4) {
+      if (!Object.keys(d.skills).length) e.skills = 'Elige al menos una habilidad (1 clic)';
+      if (!Object.keys(d.langs).length) e.langs = 'Elige al menos un idioma (1 clic)';
+    }
+    return e;
+  }
+
+  focusSoon() {
+    setTimeout(() => {
+      const el = document.querySelector('[data-cvform] input, [data-cvform] textarea');
+      if (el) el.focus();
+    }, 80);
+  }
+
+  go(n) {
+    this.setState({ step: n, errors: {} });
+    this.focusSoon();
+  }
+
+  next() {
+    const e = this.validate(this.state.step);
+    if (Object.keys(e).length) { this.setState({ errors: e }); return; }
+    if (this.state.step < 5) {
+      this.setState(s => ({ step: s.step + 1, errors: {} }));
+      this.focusSoon();
+    }
+  }
+
+  updRow(list, i, k) {
+    return e => {
+      const v = e.target.value;
+      this.setState(s => {
+        const arr = s.data[list].slice();
+        arr[i] = Object.assign({}, arr[i], { [k]: v });
+        return { data: Object.assign({}, s.data, { [list]: arr }), errors: {} };
+      });
+    };
+  }
+
+  addRow(list, row) {
+    this.setState(s => ({ data: Object.assign({}, s.data, { [list]: s.data[list].concat([row]) }), errors: {} }));
+  }
+
+  rmRow(list, i) {
+    this.setState(s => ({ data: Object.assign({}, s.data, { [list]: s.data[list].filter((_, j) => j !== i) }), errors: {} }));
+  }
+
+  cycle(list, name) {
+    const LV = ['Básico', 'Intermedio', 'Avanzado', 'Nativo'];
+    this.setState(s => {
+      const cur = Object.assign({}, s.data[list]);
+      const i = cur[name] ? LV.indexOf(cur[name]) : -1;
+      if (i === LV.length - 1) delete cur[name]; else cur[name] = LV[i + 1];
+      return { data: Object.assign({}, s.data, { [list]: cur }), errors: {} };
+    });
+  }
+
+  chipStyle(active) {
+    return {
+      padding: '9px 16px', borderRadius: 999,
+      border: '1px solid ' + (active ? '#4B51F6' : 'rgba(15,23,42,.18)'),
+      background: active ? '#4B51F6' : '#fff',
+      color: active ? '#fff' : '#0f172a',
+      fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', lineHeight: 1.2
+    };
+  }
+
+  renderVals() {
+    const st = this.state, d = st.data, e = st.errors, step = st.step;
+    const sideColor = this.props.sideColor ?? '#33373D';
+    const shape = this.props.photoShape ?? 'circle';
+    const stepDefs = [
+      ['Datos', 'Datos personales', 'Lo esencial para encabezar tu CV. Solo 4 campos son obligatorios.'],
+      ['Perfil', 'Mi perfil', 'Un resumen breve de quién eres y qué aportas.'],
+      ['Experiencia', 'Experiencia laboral', 'De la más reciente a la más antigua.'],
+      ['Formación', 'Formación académica', 'Estudios, títulos y certificaciones.'],
+      ['Habilidades', 'Habilidades e idiomas', 'Todo con un clic: sin escribir, salvo que quieras agregar algo propio.'],
+      ['Exportar', 'Exportar tu CV', 'Revisa la vista previa y descárgalo en PDF.']
+    ];
+    const stepper = stepDefs.map((s, i) => ({
+      label: (i + 1) + ' · ' + s[0],
+      onClick: () => { if (i <= step) this.go(i); },
+      style: {
+        padding: '8px 14px', borderRadius: 999, fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+        whiteSpace: 'nowrap', lineHeight: 1.2,
+        cursor: i <= step ? 'pointer' : 'default',
+        border: '1px solid ' + (i === step ? '#4B51F6' : 'rgba(15,23,42,.12)'),
+        background: i === step ? '#4B51F6' : (i < step ? 'rgba(75,81,246,.10)' : 'transparent'),
+        color: i === step ? '#fff' : (i < step ? '#4B51F6' : 'rgba(15,23,42,.45)')
+      }
+    }));
+    const h = {};
+    ['nombre', 'apellido', 'titulo', 'email', 'telefono', 'web', 'direccion', 'perfil', 'skillInput'].forEach(k => h[k] = this.field(k));
+    const onEnter = ev => { if (ev.key === 'Enter') { ev.preventDefault(); this.next(); } };
+    const onSkillEnter = ev => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        const v = d.skillInput.trim();
+        if (v && !d.skills[v]) this.set({ skills: Object.assign({}, d.skills, { [v]: 'Intermedio' }), skillInput: '' });
+      }
+    };
+    const levelChip = (list, n) => {
+      const lvl = d[list][n];
+      return { label: lvl ? (n + ' · ' + lvl) : n, style: this.chipStyle(!!lvl), onClick: () => this.cycle(list, n) };
+    };
+    const rmStyle = n => ({
+      flex: 'none', width: 40, height: 40, borderRadius: 9, border: '1px solid rgba(15,23,42,.12)',
+      background: '#fff', color: 'rgba(15,23,42,.5)', cursor: 'pointer', fontSize: 14,
+      visibility: n > 1 ? 'visible' : 'hidden'
+    });
+    const expRows = d.exp.map((r, i) => ({
+      anios: r.anios, empresa: r.empresa, desc: r.desc, error: e['exp' + i],
+      onAnios: this.updRow('exp', i, 'anios'), onEmpresa: this.updRow('exp', i, 'empresa'), onDesc: this.updRow('exp', i, 'desc'),
+      remove: () => this.rmRow('exp', i), rmStyle: rmStyle(d.exp.length)
+    }));
+    const eduRows = d.edu.map((r, i) => ({
+      anios: r.anios, centro: r.centro, titulo: r.titulo, error: e['edu' + i],
+      onAnios: this.updRow('edu', i, 'anios'), onCentro: this.updRow('edu', i, 'centro'), onTitulo: this.updRow('edu', i, 'titulo'),
+      remove: () => this.rmRow('edu', i), rmStyle: rmStyle(d.edu.length)
+    }));
+    const skillSet = Array.from(new Set(['HTML / CSS', 'JavaScript', 'React', 'Node.js', 'PHP', 'SQL', 'Git', 'WordPress', 'Figma'].concat(Object.keys(d.skills))));
+    const skillChips = skillSet.map(n => levelChip('skills', n));
+    const compSet = ['Liderazgo', 'Creatividad', 'Análisis crítico', 'Eficiencia', 'Trabajo en equipo', 'Comunicación', 'Adaptabilidad'];
+    const compChips = compSet.map(n => levelChip('comps', n));
+    const langSet = ['Español', 'Inglés', 'Portugués', 'Francés', 'Alemán', 'Italiano'];
+    const langChips = langSet.map(n => levelChip('langs', n));
+    const tituloSet = ['Programador web', 'Desarrollador full-stack', 'Diseñador UX/UI', 'Analista de datos'];
+    const tituloChips = tituloSet.map(n => ({ label: n, onClick: () => this.set({ titulo: n }), style: this.chipStyle(d.titulo === n) }));
+    const btn = (primary, disabled) => ({
+      padding: '13px 28px', borderRadius: 999, fontFamily: 'inherit', fontSize: 15, fontWeight: 600,
+      cursor: disabled ? 'default' : 'pointer',
+      border: primary ? 'none' : '1px solid rgba(15,23,42,.15)',
+      background: primary ? '#4B51F6' : 'transparent',
+      color: primary ? '#fff' : '#0f172a',
+      visibility: disabled ? 'hidden' : 'visible'
+    });
+    const pv = {
+      nombre: d.nombre.trim() || 'Nombre',
+      apellido: d.apellido.trim() || 'Apellido',
+      titulo: d.titulo.trim() || 'Título profesional',
+      perfil: d.perfil.trim() || 'Tu perfil profesional aparecerá aquí a medida que lo escribas.'
+    };
+    const initials = ((d.nombre.trim()[0] || 'C') + (d.apellido.trim()[0] || 'V')).toUpperCase();
+    const contactRows = [d.email.trim() || 'correo@ejemplo.com', d.telefono.trim(), d.web.trim(), d.direccion.trim()].filter(Boolean);
+    const expFull = d.exp.filter(r => r.empresa.trim());
+    const eduFull = d.edu.filter(r => r.centro.trim());
+    return {
+      d, e, h, onEnter, onSkillEnter, sideColor,
+      stepNum: step + 1, stepTitle: stepDefs[step][1], stepDesc: stepDefs[step][2], stepper,
+      s0: step === 0, s1: step === 1, s2: step === 2, s3: step === 3, s4: step === 4, s5: step === 5,
+      perfilCount: d.perfil.length,
+      expRows, eduRows,
+      addExp: () => this.addRow('exp', { anios: '', empresa: '', desc: '' }),
+      addEdu: () => this.addRow('edu', { anios: '', centro: '', titulo: '' }),
+      skillChips, compChips, langChips, tituloChips,
+      prev: () => { if (step > 0) this.go(step - 1); },
+      next: () => this.next(),
+      prevStyle: btn(false, step === 0), nextStyle: btn(true, step === 5),
+      nextLabel: step === 4 ? 'Ver y exportar →' : 'Siguiente →',
+      exportPdf: () => window.print(),
+      fotoInputRef: this.fotoInputRef,
+      pickFoto: () => { if (this.fotoInputRef.current) this.fotoInputRef.current.click(); },
+      onFoto: ev => {
+        const f = ev.target.files && ev.target.files[0];
+        if (!f) return;
+        const img = new Image(), url = URL.createObjectURL(f);
+        img.onload = () => {
+          const max = 512, k = Math.min(1, max / Math.max(img.width, img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.round(img.width * k);
+          c.height = Math.round(img.height * k);
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          URL.revokeObjectURL(url);
+          this.set({ foto: c.toDataURL('image/jpeg', .85) });
+        };
+        img.src = url;
+        ev.target.value = '';
+      },
+      clearFoto: () => this.set({ foto: '' }),
+      fotoBtnLabel: d.foto ? 'Cambiar foto' : 'Subir foto',
+      fotoClearStyle: {
+        padding: '10px 20px', borderRadius: 999, border: '1px solid rgba(15,23,42,.15)', background: 'transparent',
+        color: '#0f172a', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+        display: d.foto ? 'inline-block' : 'none'
+      },
+      fotoThumbStyle: {
+        flex: 'none', width: 72, height: 72, borderRadius: '50%', border: '2px solid rgba(15,23,42,.12)',
+        background: d.foto ? ('url(' + d.foto + ') center/cover no-repeat') : 'rgba(15,23,42,.06)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 22, fontWeight: 800, color: 'rgba(15,23,42,.45)'
+      },
+      cvInitials: d.foto ? '' : initials,
+      restart: () => { this.setState({ step: 0, errors: {}, data: this.blank() }); this.focusSoon(); },
+      photoStyle: {
+        width: 128, height: 128, margin: '0 auto',
+        borderRadius: shape === 'circle' ? '50%' : (shape === 'rounded' ? 22 : 0),
+        background: d.foto ? ('url(' + d.foto + ') center/cover no-repeat') : 'rgba(255,255,255,.12)',
+        border: '3px solid rgba(255,255,255,.35)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 42, fontWeight: 800, color: 'rgba(255,255,255,.85)'
+      },
+      pv, initials, contactRows,
+      pvSkills: Object.keys(d.skills).length ? Object.entries(d.skills).map(([name, level]) => ({ name, level })) : [{ name: 'Tus habilidades', level: '' }],
+      pvComps: Object.keys(d.comps).length ? Object.entries(d.comps).map(([n, l]) => n + ' · ' + l) : ['Tus competencias'],
+      pvLangs: Object.keys(d.langs).length ? Object.entries(d.langs).map(([name, level]) => ({ name, level })) : [{ name: 'Tus idiomas', level: '' }],
+      pvExp: expFull.length ? expFull : [{ anios: '20XX - 20XX', empresa: 'Tu experiencia', desc: 'Aparecerá aquí.' }],
+      pvEdu: eduFull.length ? eduFull : [{ anios: '20XX - 20XX', centro: 'Tu formación', titulo: 'Aparecerá aquí.' }]
+    };
+  }
+}
+  </script>
+</head>
+<body>
+  <x-dc>
+<div style="background:var(--bg);color:var(--fg);min-height:100vh">
+
+  <!-- Cabecera fija de la herramienta -->
+  <header style="background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;padding:18px 40px">
+    <div style="display:flex;align-items:center;gap:28px">
+      <div style="font-size:26px;font-weight:800;letter-spacing:-.02em;white-space:nowrap">Uno<span style="color:#7A80FF">Pago</span> <span style="font-size:17px;font-weight:500;color:rgba(255,255,255,.6)">· Creador de CV</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <button sc-camel-on-click="{{ restart }}" style="padding:10px 20px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:transparent;color:rgba(255,255,255,.85);font:600 14px Archivo,sans-serif;cursor:pointer" style-hover="border-color:#D0434B;color:#FF737A">↺ Reiniciar formulario</button>
+      <a href="landing.html" style="color:rgba(255,255,255,.78);font-size:15px;font-weight:500" style-hover="color:#38BDF8">← Volver al inicio</a>
+    </div>
+  </header>
+
+  <main style="max-width:1360px;margin:0 auto;padding:48px 40px 90px;display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:48px;align-items:start">
+
+    <!-- Formulario por pasos -->
+    <section data-cvform="">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:34px">
+        <sc-for list="{{ stepper }}" as="st" hint-placeholder-count="6">
+          <button sc-camel-on-click="{{ st.onClick }}" style="{{ st.style }}">{{ st.label }}</button>
+        </sc-for>
+      </div>
+
+      <p style="margin:0;font:600 12px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--a2)">Paso {{ stepNum }} de 6</p>
+      <h1 style="margin:10px 0 8px;font-size:38px;font-weight:800;letter-spacing:-.03em;line-height:1.05">{{ stepTitle }}</h1>
+      <p style="margin:0 0 30px;font-size:16px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ stepDesc }}</p>
+
+      <!-- Paso 1: Datos personales -->
+      <sc-if value="{{ s0 }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;margin:0 0 6px;color:var(--muted)">Nombre *</label>
+            <input value="{{ d.nombre }}" sc-camel-on-change="{{ h.nombre }}" sc-camel-on-key-down="{{ onEnter }}" placeholder="Alejandro" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:15px;background:#fff;color:var(--fg);outline:none" style-focus="border-color:var(--a2);box-shadow:0 0 0 3px rgba(75,81,246,.12)">
+            <div style="color:var(--a4);font-size:13px;margin-top:5px">{{ e.nombre }}</div>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;margin:0 0 6px;color:var(--muted)">Apellido *</label>
+            <input value="{{ d.apellido }}" sc-camel-on-change="{{ h.apellido }}" sc-camel-on-key-down="{{ onEnter }}" placeholder="Torres" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:15px;background:#fff;color:var(--fg);outline:none" style-focus="border-color:var(--a2);box-shadow:0 0 0 3px rgba(75,81,246,.12)">
+            <div style="color:var(--a4);font-size:13px;margin-top:5px">{{ e.apellido }}</div>
+          </div>
+          <div style="grid-column:1/-1">
+            <label style="display:block;font-size:13px;font-weight:600;margin:0 0 6px;color:var(--muted)">Título profesional *</label>
+            <input value="{{ d.titulo }}" sc-camel-on-change="{{ h.titulo }}" sc-camel-on-key-down="{{ onEnter }}" placeholder="Programador web" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:15px;background:#fff;color:var(--fg);outline:none" style-focus="border-color:var(--a2);box-shadow:0 0 0 3px rgba(75,81,246,.12)">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+              <sc-for list="{{ tituloChips }}" as="c" hint-placeholder-count="4">
+                <button sc-camel-on-click="{{ c.onClick }}" style="{{ c.style }}">{{ c.label }}</button>
+              </sc-for>
+            </div>
+            <div style="color:var(--a4);font-size:13px;margin-top:5px">{{ e.titulo }}</div>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;margin:0 0 6px;color:var(--muted)">Correo electrónico *</label>
+            <input type="email" value="{{ d.email }}" sc-camel-on-change="{{ h.email }}" sc-camel-on-key-down="{{ onEnter }}" placeholder="hola@unsitiogenial.es" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:15px;background:#fff;color:var(--fg);outline:none" style-focus="border-color:var(--a2);box-shadow:0 0 0 3px rgba(75,81,246,.12)">
+            <div style="color:var(--a4);font-size:13px;margin-top:5px">{{ e.email }}</div>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;margin:0 0 6px;color:var(--muted)">Teléfono</label>
+            <input type="tel" value="{{ d.telefono }}" sc-camel-on-change="{{ h.telefono }}" sc-camel-on-key-down="{{ onEnter }}" placeholder="+34 91 1234 567" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:15px;background:#fff;color:var(--fg);outline:none" style-focus="border-color:var(--a2);box-shadow:0 0 0 3px rgba(75,81,246,.12)">
+            <div style="color:var(--a4);font-size:13px;margin-top:5px">{{ e.telefono }}</div>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;margin:0 0 6px;color:var(--muted)">Sitio web</label>
+            <input value="{{ d.web }}" sc-camel-on-change="{{ h.web }}" sc-camel-on-key-down="{{ onEnter }}" placeholder="www.unsitiogenial.es" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:15px;background:#fff;color:var(--fg);outline:none" style-focus="border-color:var(--a2);box-shadow:0 0 0 3px rgba(75,81,246,.12)">
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;margin:0 0 6px;color:var(--muted)">Dirección</label>
+            <input value="{{ d.direccion }}" sc-camel-on-change="{{ h.direccion }}" sc-camel-on-key-down="{{ onEnter }}" placeholder="Calle Cualquiera 123" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:15px;background:#fff;color:var(--fg);outline:none" style-focus="border-color:var(--a2);box-shadow:0 0 0 3px rgba(75,81,246,.12)">
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Paso 2: Perfil y foto -->
+      <sc-if value="{{ s1 }}" hint-placeholder-val="{{ false }}">
+        <label style="display:block;font-size:13px;font-weight:600;margin:0 0 6px;color:var(--muted)">Mi perfil *</label>
+        <textarea rows="6" value="{{ d.perfil }}" sc-camel-on-change="{{ h.perfil }}" placeholder="Resume en 2–4 frases quién eres, tu especialidad y qué aportas." style="width:100%;box-sizing:border-box;padding:14px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:15px;line-height:1.55;background:#fff;color:var(--fg);outline:none;resize:vertical" style-focus="border-color:var(--a2);box-shadow:0 0 0 3px rgba(75,81,246,.12)"></textarea>
+        <div style="display:flex;justify-content:space-between;margin-top:6px">
+          <div style="color:var(--a4);font-size:13px">{{ e.perfil }}</div>
+          <div style="color:var(--muted);font-size:13px">{{ perfilCount }} caracteres</div>
+        </div>
+        <label style="display:block;font-size:13px;font-weight:600;margin:26px 0 6px;color:var(--muted)">Foto del CV (opcional)</label>
+        <div style="display:flex;align-items:center;gap:16px;border:1px dashed var(--line);border-radius:12px;padding:16px;background:#fff">
+          <div style="{{ fotoThumbStyle }}">{{ initials }}</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button sc-camel-on-click="{{ pickFoto }}" style="padding:10px 20px;border-radius:999px;border:1px solid var(--a2);background:transparent;color:var(--a2);font:600 14px Archivo,sans-serif;cursor:pointer" style-hover="background:rgba(75,81,246,.08)">{{ fotoBtnLabel }}</button>
+              <button sc-camel-on-click="{{ clearFoto }}" style="{{ fotoClearStyle }}">Quitar</button>
+            </div>
+            <span style="font-size:13px;color:var(--muted)">JPG o PNG. Si no subes foto, se usan tus iniciales.</span>
+          </div>
+          <input type="file" accept="image/*" sc-camel-on-change="{{ onFoto }}" ref="{{ fotoInputRef }}" style="display:none">
+        </div>
+      </sc-if>
+
+      <!-- Paso 3: Experiencia laboral -->
+      <sc-if value="{{ s2 }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;gap:14px">
+          <sc-for list="{{ expRows }}" as="r" hint-placeholder-count="1">
+            <div style="border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff;display:grid;gap:10px">
+              <div style="display:flex;gap:10px">
+                <input value="{{ r.anios }}" sc-camel-on-change="{{ r.onAnios }}" sc-camel-on-key-down="{{ onEnter }}" placeholder="2019 - 2023" style="flex:0 0 150px;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line);border-radius:9px;font:inherit;font-size:14px;outline:none" style-focus="border-color:var(--a2)">
+                <input value="{{ r.empresa }}" sc-camel-on-change="{{ r.onEmpresa }}" sc-camel-on-key-down="{{ onEnter }}" placeholder="Empresa · puesto" style="flex:1;min-width:0;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line);border-radius:9px;font:inherit;font-size:14px;outline:none" style-focus="border-color:var(--a2)">
+                <button sc-camel-on-click="{{ r.remove }}" title="Eliminar" style="{{ r.rmStyle }}">✕</button>
+              </div>
+              <textarea rows="2" value="{{ r.desc }}" sc-camel-on-change="{{ r.onDesc }}" placeholder="Logros y responsabilidades (opcional)" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line);border-radius:9px;font:inherit;font-size:14px;line-height:1.5;outline:none;resize:vertical" style-focus="border-color:var(--a2)"></textarea>
+              <div style="color:var(--a4);font-size:13px">{{ r.error }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <button sc-camel-on-click="{{ addExp }}" style="margin-top:14px;padding:11px 20px;border-radius:999px;border:1px dashed var(--a2);background:transparent;color:var(--a2);font:600 14px Archivo,sans-serif;cursor:pointer" style-hover="background:rgba(75,81,246,.08)">+ Agregar experiencia</button>
+        <div style="color:var(--a4);font-size:13px;margin-top:8px">{{ e.exp }}</div>
+      </sc-if>
+
+      <!-- Paso 4: Formación académica -->
+      <sc-if value="{{ s3 }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;gap:14px">
+          <sc-for list="{{ eduRows }}" as="r" hint-placeholder-count="1">
+            <div style="border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff;display:grid;gap:10px">
+              <div style="display:flex;gap:10px">
+                <input value="{{ r.anios }}" sc-camel-on-change="{{ r.onAnios }}" sc-camel-on-key-down="{{ onEnter }}" placeholder="2018 - 2023" style="flex:0 0 150px;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line);border-radius:9px;font:inherit;font-size:14px;outline:none" style-focus="border-color:var(--a2)">
+                <input value="{{ r.centro }}" sc-camel-on-change="{{ r.onCentro }}" sc-camel-on-key-down="{{ onEnter }}" placeholder="Universidad / centro" style="flex:1;min-width:0;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line);border-radius:9px;font:inherit;font-size:14px;outline:none" style-focus="border-color:var(--a2)">
+                <button sc-camel-on-click="{{ r.remove }}" title="Eliminar" style="{{ r.rmStyle }}">✕</button>
+              </div>
+              <input value="{{ r.titulo }}" sc-camel-on-change="{{ r.onTitulo }}" sc-camel-on-key-down="{{ onEnter }}" placeholder="Título obtenido (ej: Ingeniería en sistemas)" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line);border-radius:9px;font:inherit;font-size:14px;outline:none" style-focus="border-color:var(--a2)">
+              <div style="color:var(--a4);font-size:13px">{{ r.error }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <button sc-camel-on-click="{{ addEdu }}" style="margin-top:14px;padding:11px 20px;border-radius:999px;border:1px dashed var(--a2);background:transparent;color:var(--a2);font:600 14px Archivo,sans-serif;cursor:pointer" style-hover="background:rgba(75,81,246,.08)">+ Agregar formación</button>
+        <div style="color:var(--a4);font-size:13px;margin-top:8px">{{ e.edu }}</div>
+      </sc-if>
+
+      <!-- Paso 5: Habilidades, competencias e idiomas -->
+      <sc-if value="{{ s4 }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;gap:28px">
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;margin:0 0 10px;color:var(--muted)">Habilidades (software) * — cada clic sube el nivel; al final se quita</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ skillChips }}" as="c" hint-placeholder-count="8">
+                <button sc-camel-on-click="{{ c.onClick }}" style="{{ c.style }}">{{ c.label }}</button>
+              </sc-for>
+            </div>
+            <input value="{{ d.skillInput }}" sc-camel-on-change="{{ h.skillInput }}" sc-camel-on-key-down="{{ onSkillEnter }}" placeholder="Otra habilidad + Enter" style="margin-top:10px;width:260px;box-sizing:border-box;padding:10px 14px;border:1px solid var(--line);border-radius:999px;font:inherit;font-size:14px;outline:none" style-focus="border-color:var(--a2)">
+            <div style="color:var(--a4);font-size:13px;margin-top:6px">{{ e.skills }}</div>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;margin:0 0 10px;color:var(--muted)">Competencias — cada clic sube el nivel; al final se quita</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ compChips }}" as="c" hint-placeholder-count="6">
+                <button sc-camel-on-click="{{ c.onClick }}" style="{{ c.style }}">{{ c.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;margin:0 0 10px;color:var(--muted)">Idiomas * — cada clic sube el nivel; al final se quita</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ langChips }}" as="c" hint-placeholder-count="5">
+                <button sc-camel-on-click="{{ c.onClick }}" style="{{ c.style }}">{{ c.label }}</button>
+              </sc-for>
+            </div>
+            <div style="color:var(--a4);font-size:13px;margin-top:6px">{{ e.langs }}</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Paso 6: Exportar -->
+      <sc-if value="{{ s5 }}" hint-placeholder-val="{{ false }}">
+        <div style="border:1px solid var(--line);border-radius:16px;background:#fff;padding:28px;display:grid;gap:16px">
+          <p style="margin:0;font-size:16px;line-height:1.55;color:var(--muted);text-wrap:pretty">Tu CV está listo. Al exportar se abrirá el diálogo de impresión: elige <strong style="color:var(--fg)">«Guardar como PDF»</strong> y tamaño A4.</p>
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <button sc-camel-on-click="{{ exportPdf }}" style="padding:15px 30px;border-radius:999px;border:none;background:var(--a2);color:#fff;font:600 16px Archivo,sans-serif;cursor:pointer" style-hover="background:#3a40d6">Exportar PDF ↓</button>
+            <button sc-camel-on-click="{{ restart }}" style="padding:15px 26px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--fg);font:600 15px Archivo,sans-serif;cursor:pointer" style-hover="border-color:var(--a4);color:var(--a4)">Empezar de nuevo</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display:flex;justify-content:space-between;gap:12px;margin-top:36px">
+        <button sc-camel-on-click="{{ prev }}" style="{{ prevStyle }}">← Atrás</button>
+        <button sc-camel-on-click="{{ next }}" style="{{ nextStyle }}">{{ nextLabel }}</button>
+      </div>
+      <p style="margin:16px 0 0;font-size:13px;color:var(--muted)">Consejo: presiona <strong>Enter</strong> para avanzar. Tu progreso se guarda automáticamente.</p>
+    </section>
+
+    <!-- Vista previa en vivo (es también la hoja que se imprime) -->
+    <aside style="position:sticky;top:24px">
+      <p style="margin:0 0 12px;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">Vista previa en vivo</p>
+      <div style="height:640px;overflow:hidden">
+        <div id="cv-print" style="width:794px;min-height:1123px;background:#fff;color:#22252A;display:grid;grid-template-columns:270px 1fr;transform:scale(.56);transform-origin:top left;box-shadow:0 24px 60px rgba(15,23,42,.22)">
+          <div style="background:{{ sideColor }};color:#fff;padding:46px 30px;display:flex;flex-direction:column;gap:36px">
+            <div style="{{ photoStyle }}">{{ cvInitials }}</div>
+            <div>
+              <div style="font-size:13px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;border-bottom:1px solid rgba(255,255,255,.28);padding-bottom:8px;margin-bottom:14px">Contacto</div>
+              <div style="display:grid;gap:9px">
+                <sc-for list="{{ contactRows }}" as="c" hint-placeholder-count="2">
+                  <div style="font-size:13.5px;line-height:1.45;color:rgba(255,255,255,.88);word-break:break-word">{{ c }}</div>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:13px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;border-bottom:1px solid rgba(255,255,255,.28);padding-bottom:8px;margin-bottom:14px">Habilidades</div>
+              <div style="display:grid;gap:8px">
+                <sc-for list="{{ pvSkills }}" as="s" hint-placeholder-count="3">
+                  <div style="display:flex;justify-content:space-between;gap:10px;font-size:13.5px;color:rgba(255,255,255,.88)"><span>{{ s.name }}</span><span style="color:rgba(255,255,255,.6)">{{ s.level }}</span></div>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:13px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;border-bottom:1px solid rgba(255,255,255,.28);padding-bottom:8px;margin-bottom:14px">Idiomas</div>
+              <div style="display:grid;gap:8px">
+                <sc-for list="{{ pvLangs }}" as="l" hint-placeholder-count="2">
+                  <div style="display:flex;justify-content:space-between;gap:10px;font-size:13.5px;color:rgba(255,255,255,.88)"><span>{{ l.name }}</span><span style="color:rgba(255,255,255,.6)">{{ l.level }}</span></div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          <div style="padding:56px 48px 48px">
+            <div style="font-size:46px;font-weight:800;line-height:1.02;letter-spacing:-.02em">{{ pv.nombre }}</div>
+            <div style="font-size:46px;font-weight:800;line-height:1.08;letter-spacing:-.02em">{{ pv.apellido }}</div>
+            <div style="font-size:17px;letter-spacing:.16em;text-transform:uppercase;color:#6B7280;margin-top:12px;font-weight:600">{{ pv.titulo }}</div>
+            <div style="font-size:15px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;border-bottom:2px solid {{ sideColor }};padding-bottom:8px;margin:38px 0 14px">Mi Perfil</div>
+            <p style="margin:0;font-size:14px;line-height:1.6;color:#3F4650;text-wrap:pretty">{{ pv.perfil }}</p>
+            <div style="font-size:15px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;border-bottom:2px solid {{ sideColor }};padding-bottom:8px;margin:34px 0 16px">Experiencia Laboral</div>
+            <div style="display:grid;gap:16px">
+              <sc-for list="{{ pvExp }}" as="x" hint-placeholder-count="2">
+                <div style="display:grid;grid-template-columns:120px 1fr;gap:18px">
+                  <div style="font-size:13.5px;font-weight:700;color:#22252A">{{ x.anios }}</div>
+                  <div>
+                    <div style="font-size:15px;font-weight:700">{{ x.empresa }}</div>
+                    <p style="margin:4px 0 0;font-size:13.5px;line-height:1.55;color:#3F4650">{{ x.desc }}</p>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:15px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;border-bottom:2px solid {{ sideColor }};padding-bottom:8px;margin:34px 0 16px">Formación Académica</div>
+            <div style="display:grid;gap:14px">
+              <sc-for list="{{ pvEdu }}" as="x" hint-placeholder-count="2">
+                <div style="display:grid;grid-template-columns:120px 1fr;gap:18px">
+                  <div style="font-size:13.5px;font-weight:700;color:#22252A">{{ x.anios }}</div>
+                  <div>
+                    <div style="font-size:15px;font-weight:700">{{ x.centro }}</div>
+                    <div style="font-size:13.5px;color:#3F4650;margin-top:2px">{{ x.titulo }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:15px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;border-bottom:2px solid {{ sideColor }};padding-bottom:8px;margin:34px 0 16px">Competencias</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <sc-for list="{{ pvComps }}" as="c" hint-placeholder-count="4">
+                <span style="font-size:13px;padding:6px 14px;border:1px solid #D5D9DF;border-radius:6px;color:#3F4650">{{ c }}</span>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+  </x-dc>
+</body>
+</html>

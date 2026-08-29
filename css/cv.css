@@ -1,0 +1,89 @@
+/* ==========================================================================
+   UnoPago - Creador de CV
+   ==========================================================================
+   Paleta propia de la herramienta (igual que el Panel de Administración,
+   no se sincroniza con los temas de la Landing).
+   ========================================================================== */
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Archivo, Helvetica, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: #F8FAFC;
+}
+
+a {
+  color: #4B51F6;
+  text-decoration: none;
+}
+
+a:hover {
+  color: #297C7C;
+}
+
+:root {
+  --bg: #F8FAFC;
+  --surface: #fff;
+  --fg: #0f172a;
+  --muted: rgba(15, 23, 42, .62);
+  --line: rgba(15, 23, 42, .12);
+  --a1: #38BDF8;
+  --a2: #4B51F6;
+  --a3: #D966D4;
+  --a4: #D0434B;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(15, 23, 42, .35);
+}
+
+/* Al imprimir solo se muestra la hoja del CV, a tamaño A4 real.
+   Se oculta el resto de la interfaz en lugar de sacar la hoja del flujo con
+   position:fixed, porque un elemento fijo se repite en todas las páginas. */
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html, body {
+    background: #fff;
+  }
+
+  header,
+  section[data-cvform],
+  aside > p {
+    display: none !important;
+  }
+
+  main {
+    display: block !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  aside {
+    position: static !important;
+    top: auto !important;
+  }
+
+  /* En pantalla este contenedor recorta la vista previa a 640px de alto */
+  aside > div {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  #cv-print {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    transform: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+}
