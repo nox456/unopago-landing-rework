@@ -393,4 +393,15 @@
 
   // Exportar para acceso opcional
   window.TangramMorphLoader = TangramMorphLoader;
+  window.TangramCore = {
+    TANGRAM_FIGURES,
+    SEQUENCE,
+    TRANSITION_MS,
+    PAUSE_MS,
+    STEP_DURATION,
+    cubicBezier,
+    easeInOutCubic,
+    getActivePalette
+  };
 })();
+

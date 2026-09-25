@@ -6,6 +6,77 @@
 
 const BaseLogic = (typeof DCLogic !== 'undefined' ? DCLogic : (typeof window !== 'undefined' && window.DCLogic ? window.DCLogic : class {}));
 
+// Geometría canónica de los 7 polígonos del Tangram (viewBox="0 0 200 200")
+const TANGRAM_FIGURES = {
+  fig1: [
+    [[55, 65], [140, 65], [97.5, 107.5], [97.5, 107.5]],
+    [[97.5, 107.5], [140, 65], [182.5, 107.5], [182.5, 107.5]],
+    [[15, 65], [55, 65], [55, 107.5], [55, 107.5]],
+    [[10, 155], [40, 155], [25, 137.5], [25, 137.5]],
+    [[122.5, 137.5], [152.5, 137.5], [152.5, 107.5], [152.5, 107.5]],
+    [[152.5, 107.5], [182.5, 107.5], [182.5, 137.5], [152.5, 137.5]],
+    [[25, 137.5], [55, 137.5], [85, 107.5], [55, 107.5]]
+  ],
+  fig2: [
+    [[40, 100], [100, 100], [100, 160], [100, 160]],
+    [[100, 100], [160, 100], [100, 160], [100, 160]],
+    [[100, 100], [160, 100], [130, 70], [130, 70]],
+    [[40, 100], [70, 100], [70, 70], [70, 70]],
+    [[70, 100], [70, 70], [100, 70], [100, 70]],
+    [[85, 70], [115, 70], [115, 40], [85, 40]],
+    [[70, 100], [100, 100], [130, 70], [100, 70]]
+  ],
+  fig3: [
+    [[40, 105], [100, 105], [40, 165], [40, 165]],
+    [[100, 105], [165, 125], [120, 165], [120, 165]],
+    [[95, 35], [125, 65], [65, 65], [65, 65]],
+    [[20, 105], [40, 85], [40, 105], [40, 105]],
+    [[70, 105], [100, 105], [100, 135], [100, 135]],
+    [[40, 75], [70, 75], [70, 105], [40, 105]],
+    [[80, 75], [120, 75], [140, 95], [100, 95]]
+  ]
+};
+
+const TANGRAM_SEQUENCE = ['fig1', 'fig2', 'fig3'];
+const TANGRAM_TRANSITION_MS = 900;
+const TANGRAM_PAUSE_MS = 350;
+const TANGRAM_STEP_DURATION = TANGRAM_TRANSITION_MS + TANGRAM_PAUSE_MS;
+
+function tangramCubicBezier(x1, y1, x2, y2) {
+  const cx = 3.0 * x1, bx = 3.0 * (x2 - x1) - cx, ax = 1.0 - cx - bx;
+  const cy = 3.0 * y1, by = 3.0 * (y2 - y1) - cy, ay = 1.0 - cy - by;
+  function sx(t) { return ((ax * t + bx) * t + cx) * t; }
+  function sy(t) { return ((ay * t + by) * t + cy) * t; }
+  function dx(t) { return (3.0 * ax * t + 2.0 * bx) * t + cx; }
+  function solve(x) {
+    let t = x;
+    for (let i = 0; i < 8; i++) {
+      const x2Val = sx(t) - x;
+      if (Math.abs(x2Val) < 1e-5) return t;
+      const d2 = dx(t);
+      if (Math.abs(d2) < 1e-6) break;
+      t -= x2Val / d2;
+    }
+    let t0 = 0.0, t1 = 1.0;
+    t = x;
+    if (t < t0) return t0;
+    if (t > t1) return t1;
+    while (t0 < t1) {
+      const x2Val = sx(t);
+      if (Math.abs(x2Val - x) < 1e-5) return t;
+      if (x > x2Val) t0 = t; else t1 = t;
+      t = (t1 - t0) * 0.5 + t0;
+    }
+    return t;
+  }
+  return function(x) {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    return sy(solve(x));
+  };
+}
+const tangramEaseInOut = tangramCubicBezier(0.4, 0, 0.2, 1);
+
 // Default 5-color palettes (60-30-10)
 const DEF_COLORS_LIGHT = ['#F8FAFC', '#FFFFFF', '#0F172A', '#4B51F6', '#E2E8F0'];
 const DEF_COLORS_DARK = ['#0B0E13', '#161B22', '#F0F6FC', '#38BDF8', '#30363D'];
@@ -64,8 +135,12 @@ class Component extends BaseLogic {
     authName: '',
     authError: '',
     status: '',
-    confirmModal: null
+    confirmModal: null,
+    tangramRunning: false,
+    tangramSpeed: 1.0,
+    tangramBgMode: 'theme'
   };
+
 
   componentDidMount() {
     try {
@@ -289,6 +364,167 @@ class Component extends BaseLogic {
     });
   }
 
+  // --- MÉTODOS CONTROLADORES DE PREVISUALIZACIÓN TANGRAM ---
+  tangramAnimId = null;
+  tangramStartTime = null;
+  tangramLooping = false;
+  lastTangramStep = 0;
+
+  getTangramPolygons = () => {
+    return [1, 2, 3, 4, 5, 6, 7]
+      .map(i => document.getElementById('admin-tp-' + i))
+      .filter(Boolean);
+  };
+
+  syncTangramColors = () => {
+    const polys = this.getTangramPolygons();
+    if (!polys.length) return;
+    const isDark = this.state.paletteMode === 'dark';
+    const activeId = isDark ? this.state.activeDarkId : this.state.activeLightId;
+    const getModeOfPalette = p => {
+      if (p.mode) return p.mode;
+      if (p.id >= 100 || /dark|oscuro|noche|midnight|cyberpunk|oled/i.test(p.name || '')) return 'dark';
+      return 'light';
+    };
+    const modePals = (this.state.palettes || []).filter(p => getModeOfPalette(p) === this.state.paletteMode);
+    const activePal = modePals.find(p => p.id === activeId) || modePals[0];
+    const c = this.state.form ? this.state.form.colors : (activePal ? activePal.colors : (isDark ? DEF_COLORS_DARK : DEF_COLORS_LIGHT));
+    const pieceColors = [c[0], c[1], c[3], c[0], c[1], c[4], c[2]];
+    const strokeColor = isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(0, 0, 0, 0.16)';
+    polys.forEach((p, idx) => {
+      if (p && pieceColors[idx]) {
+        p.style.fill = pieceColors[idx];
+        p.style.stroke = strokeColor;
+        p.style.strokeWidth = '1px';
+      }
+    });
+  };
+
+  startTangramLoop = () => {
+    this.tangramLooping = true;
+    this.tangramStartTime = null;
+    this.setState({ tangramRunning: true, status: 'Tangram: Bucle iniciado (reproduciendo indefinidamente)' });
+
+    setTimeout(() => this.syncTangramColors(), 10);
+
+    const render = (now) => {
+      if (!this.tangramLooping) return;
+      if (!this.tangramStartTime) this.tangramStartTime = now;
+      const elapsed = (now - this.tangramStartTime) * (this.state.tangramSpeed || 1.0);
+      const fullCycle = TANGRAM_STEP_DURATION * TANGRAM_SEQUENCE.length;
+      const cycleProgress = elapsed % fullCycle;
+      const stepIndex = Math.floor(cycleProgress / TANGRAM_STEP_DURATION);
+      const nextIndex = (stepIndex + 1) % TANGRAM_SEQUENCE.length;
+      const timeInStep = cycleProgress % TANGRAM_STEP_DURATION;
+
+      let progress = 0;
+      if (timeInStep < TANGRAM_TRANSITION_MS) {
+        progress = tangramEaseInOut(timeInStep / TANGRAM_TRANSITION_MS);
+      } else {
+        progress = 1.0;
+      }
+
+      if (this.lastTangramStep !== stepIndex) {
+        this.lastTangramStep = stepIndex;
+        const stepEl = document.getElementById('admin-tangram-current-fig-label');
+        if (stepEl) {
+          const names = [
+            'Figura 1 · Canino (Silueta #8)',
+            'Figura 2 · Diamante / Flecha (Silueta #9)',
+            'Figura 3 · Estrella / Flor (Silueta #109)'
+          ];
+          stepEl.textContent = names[stepIndex] || ('Figura ' + (stepIndex + 1));
+        }
+      }
+
+      const fromFig = TANGRAM_FIGURES[TANGRAM_SEQUENCE[stepIndex]];
+      const toFig = TANGRAM_FIGURES[TANGRAM_SEQUENCE[nextIndex]];
+      const polys = this.getTangramPolygons();
+
+      for (let i = 0; i < 7; i++) {
+        const poly = polys[i];
+        if (!poly) continue;
+        const fromPts = fromFig[i];
+        const toPts = toFig[i];
+        let ptsStr = '';
+        for (let v = 0; v < 4; v++) {
+          const x = fromPts[v][0] + (toPts[v][0] - fromPts[v][0]) * progress;
+          const y = fromPts[v][1] + (toPts[v][1] - fromPts[v][1]) * progress;
+          ptsStr += `${x.toFixed(2)},${y.toFixed(2)} `;
+        }
+        poly.setAttribute('points', ptsStr.trim());
+      }
+
+      this.tangramAnimId = requestAnimationFrame(render);
+    };
+
+    if (this.tangramAnimId) cancelAnimationFrame(this.tangramAnimId);
+    this.tangramAnimId = requestAnimationFrame(render);
+  };
+
+  stopTangramLoop = () => {
+    this.tangramLooping = false;
+    if (this.tangramAnimId) {
+      cancelAnimationFrame(this.tangramAnimId);
+      this.tangramAnimId = null;
+    }
+    this.tangramStartTime = null;
+    this.setState({ tangramRunning: false, status: 'Tangram: Bucle en pausa' });
+  };
+
+  toggleTangramLoop = () => {
+    if (this.tangramLooping) {
+      this.stopTangramLoop();
+    } else {
+      this.startTangramLoop();
+    }
+  };
+
+  setTangramFigure = (figIndex) => {
+    const key = TANGRAM_SEQUENCE[figIndex];
+    const fig = TANGRAM_FIGURES[key];
+    if (!fig) return;
+    const polys = this.getTangramPolygons();
+    for (let i = 0; i < 7; i++) {
+      const poly = polys[i];
+      if (!poly) continue;
+      const pts = fig[i];
+      let ptsStr = '';
+      for (let v = 0; v < 4; v++) {
+        ptsStr += `${pts[v][0]},${pts[v][1]} `;
+      }
+      poly.setAttribute('points', ptsStr.trim());
+    }
+    this.lastTangramStep = figIndex;
+    const stepEl = document.getElementById('admin-tangram-current-fig-label');
+    if (stepEl) {
+      const names = [
+        'Figura 1 · Canino (Silueta #8)',
+        'Figura 2 · Diamante / Flecha (Silueta #9)',
+        'Figura 3 · Estrella / Flor (Silueta #109)'
+      ];
+      stepEl.textContent = names[figIndex] || ('Figura ' + (figIndex + 1));
+    }
+    if (this.tangramLooping) {
+      this.tangramStartTime = performance.now() - (figIndex * TANGRAM_STEP_DURATION);
+    }
+  };
+
+  setTangramSpeed = (spd) => {
+    this.setState({ tangramSpeed: spd });
+  };
+
+  setTangramBgMode = (mode) => {
+    this.setState({ tangramBgMode: mode });
+  };
+
+  goTangram = () => {
+    this.setState({ tab: 'tangram' }, () => {
+      this.syncTangramColors();
+    });
+    setTimeout(() => this.syncTangramColors(), 60);
+  };
+
   renderVals() {
     const st = this.state;
     const isDarkMode = st.paletteMode === 'dark';
@@ -356,6 +592,13 @@ class Component extends BaseLogic {
     const lCta = pub.colors[3];
     const lBorder = pub.colors[4];
 
+    // Cálculos para la previsualización del Tangram
+    let tangramCanvasBg = isDarkMode ? (cBg || '#0b0e13') : '#ffffff';
+    if (st.tangramBgMode === 'white') tangramCanvasBg = '#ffffff';
+    if (st.tangramBgMode === 'dark') tangramCanvasBg = '#0b0e13';
+    if (st.tangramBgMode === 'dominant') tangramCanvasBg = cBg;
+    if (st.tangramBgMode === 'surface') tangramCanvasBg = cSurface;
+
     return {
       hasConfirmModal: !!st.confirmModal,
       confirmTitle: st.confirmModal ? st.confirmModal.title : '',
@@ -370,14 +613,80 @@ class Component extends BaseLogic {
 
       isColors: st.tab === 'colors',
       isType: st.tab === 'type',
-      goColors: () => this.setState({ tab: 'colors' }),
-      goType: () => this.setState({ tab: 'type' }),
+      isTangram: st.tab === 'tangram',
+      goColors: () => {
+        if (this.tangramLooping) this.stopTangramLoop();
+        this.setState({ tab: 'colors' });
+      },
+      goType: () => {
+        if (this.tangramLooping) this.stopTangramLoop();
+        this.setState({ tab: 'type' });
+      },
+      goTangram: this.goTangram,
       tabColorsStyle: tab(st.tab === 'colors'),
       tabTypeStyle: tab(st.tab === 'type'),
+      tabTangramStyle: tab(st.tab === 'tangram'),
       statusText: st.status,
+
+      // Propiedades y métodos del módulo Tangram
+      isTangramRunning: !!st.tangramRunning,
+      isTangramStopped: !st.tangramRunning,
+      tangramRunning: st.tangramRunning,
+      tangramLoopBtnText: st.tangramRunning ? '⏸ Detener bucle' : '▶ Iniciar bucle',
+      tangramLoopBtnStyle: {
+        background: st.tangramRunning ? '#dc2626' : '#4B51F6',
+        color: '#fff',
+        border: 0,
+        borderRadius: '12px',
+        padding: '14px 26px',
+        font: '700 15px Archivo, sans-serif',
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        boxShadow: st.tangramRunning ? '0 8px 20px rgba(220,38,38,0.3)' : '0 8px 20px rgba(75,81,246,0.3)',
+        transition: 'all .2s ease'
+      },
+      toggleTangramLoop: this.toggleTangramLoop,
+
+      tangramFig1: () => this.setTangramFigure(0),
+      tangramFig2: () => this.setTangramFigure(1),
+      tangramFig3: () => this.setTangramFigure(2),
+
+      tangramSpeed: st.tangramSpeed || 1.0,
+      setSpeed05: () => this.setTangramSpeed(0.5),
+      setSpeed10: () => this.setTangramSpeed(1.0),
+      setSpeed15: () => this.setTangramSpeed(1.5),
+      setSpeed20: () => this.setTangramSpeed(2.0),
+
+      tangramBgMode: st.tangramBgMode || 'theme',
+      setBgTheme: () => this.setTangramBgMode('theme'),
+      setBgWhite: () => this.setTangramBgMode('white'),
+      setBgDark: () => this.setTangramBgMode('dark'),
+      setBgDominant: () => this.setTangramBgMode('dominant'),
+      setBgSurface: () => this.setTangramBgMode('surface'),
+
+      tangramCanvasBg,
+      tangramStroke: isDarkMode ? 'rgba(255, 255, 255, 0.22)' : 'rgba(0, 0, 0, 0.16)',
+      tangramC1: cBg,
+      tangramC2: cSurface,
+      tangramC3: cText,
+      tangramC4: cCta,
+      tangramC5: cBorder,
+
+      tangramPiecesList: [
+        { id: 1, name: 'Triángulo Grande 1 (TL1)', role: '1. Dominante (60%)', color: cBg, desc: 'Lomo continuo horizontal del animal' },
+        { id: 2, name: 'Triángulo Grande 2 (TL2)', role: '2. Superficie (20%)', color: cSurface, desc: 'Torso y caída posterior angular a 45°' },
+        { id: 3, name: 'Triángulo Mediano (TM)', role: '4. Acento / CTA (10%)', color: cCta, desc: 'Hocico y cabeza afilada proyectada' },
+        { id: 4, name: 'Triángulo Pequeño 1 (TS1)', role: '1. Dominante (60%)', color: cBg, desc: 'Pezuña y base de pata delantera' },
+        { id: 5, name: 'Triángulo Pequeño 2 (TS2)', role: '2. Superficie (20%)', color: cSurface, desc: 'Pie y apoyo de pata trasera' },
+        { id: 6, name: 'Cuadrado Central (SQ)', role: '5. Neutro / Bordes (10%)', color: cBorder, desc: 'Corvejón y masa posterior' },
+        { id: 7, name: 'Paralelogramo (PA)', role: '3. Texto / Lectura', color: cText, desc: 'Pata delantera extendida a 45°' }
+      ],
 
       paletteMode: st.paletteMode,
       modeTitle: isDarkMode ? 'Modo Oscuro' : 'Modo Claro',
+
       modeBtnText: isDarkMode ? '☀️ Ver Paletas Modo Claro' : '🌙 Ver Paletas Modo Oscuro',
       modeBtnStyle: {
         background: isDarkMode ? '#38BDF8' : '#0f172a',

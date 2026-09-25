@@ -16,12 +16,84 @@
   <script src="js/vendor/react-dom.production.min.js"></script>
   <script src="js/vendor/dc-runtime.js"></script>
 
-  <!-- Lógica de la Aplicación -->
+  <!-- Lógica de la Aplicación y Tangram Loader -->
+  <script src="js/tangram-loader.js"></script>
   <script src="js/app.js"></script>
 
   <!-- Script de lógica interpretado por el runtime DC -->
   <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
 const BaseLogic = (typeof DCLogic !== 'undefined' ? DCLogic : (typeof window !== 'undefined' && window.DCLogic ? window.DCLogic : class {}));
+
+// Geometría canónica de los 7 polígonos del Tangram (viewBox="0 0 200 200")
+const TANGRAM_FIGURES = {
+  fig1: [
+    [[55, 65], [140, 65], [97.5, 107.5], [97.5, 107.5]],
+    [[97.5, 107.5], [140, 65], [182.5, 107.5], [182.5, 107.5]],
+    [[15, 65], [55, 65], [55, 107.5], [55, 107.5]],
+    [[10, 155], [40, 155], [25, 137.5], [25, 137.5]],
+    [[122.5, 137.5], [152.5, 137.5], [152.5, 107.5], [152.5, 107.5]],
+    [[152.5, 107.5], [182.5, 107.5], [182.5, 137.5], [152.5, 137.5]],
+    [[25, 137.5], [55, 137.5], [85, 107.5], [55, 107.5]]
+  ],
+  fig2: [
+    [[40, 100], [100, 100], [100, 160], [100, 160]],
+    [[100, 100], [160, 100], [100, 160], [100, 160]],
+    [[100, 100], [160, 100], [130, 70], [130, 70]],
+    [[40, 100], [70, 100], [70, 70], [70, 70]],
+    [[70, 100], [70, 70], [100, 70], [100, 70]],
+    [[85, 70], [115, 70], [115, 40], [85, 40]],
+    [[70, 100], [100, 100], [130, 70], [100, 70]]
+  ],
+  fig3: [
+    [[40, 105], [100, 105], [40, 165], [40, 165]],
+    [[100, 105], [165, 125], [120, 165], [120, 165]],
+    [[95, 35], [125, 65], [65, 65], [65, 65]],
+    [[20, 105], [40, 85], [40, 105], [40, 105]],
+    [[70, 105], [100, 105], [100, 135], [100, 135]],
+    [[40, 75], [70, 75], [70, 105], [40, 105]],
+    [[80, 75], [120, 75], [140, 95], [100, 95]]
+  ]
+};
+
+const TANGRAM_SEQUENCE = ['fig1', 'fig2', 'fig3'];
+const TANGRAM_TRANSITION_MS = 900;
+const TANGRAM_PAUSE_MS = 350;
+const TANGRAM_STEP_DURATION = TANGRAM_TRANSITION_MS + TANGRAM_PAUSE_MS;
+
+function tangramCubicBezier(x1, y1, x2, y2) {
+  const cx = 3.0 * x1, bx = 3.0 * (x2 - x1) - cx, ax = 1.0 - cx - bx;
+  const cy = 3.0 * y1, by = 3.0 * (y2 - y1) - cy, ay = 1.0 - cy - by;
+  function sx(t) { return ((ax * t + bx) * t + cx) * t; }
+  function sy(t) { return ((ay * t + by) * t + cy) * t; }
+  function dx(t) { return (3.0 * ax * t + 2.0 * bx) * t + cx; }
+  function solve(x) {
+    let t = x;
+    for (let i = 0; i < 8; i++) {
+      const x2Val = sx(t) - x;
+      if (Math.abs(x2Val) < 1e-5) return t;
+      const d2 = dx(t);
+      if (Math.abs(d2) < 1e-6) break;
+      t -= x2Val / d2;
+    }
+    let t0 = 0.0, t1 = 1.0;
+    t = x;
+    if (t < t0) return t0;
+    if (t > t1) return t1;
+    while (t0 < t1) {
+      const x2Val = sx(t);
+      if (Math.abs(x2Val - x) < 1e-5) return t;
+      if (x > x2Val) t0 = t; else t1 = t;
+      t = (t1 - t0) * 0.5 + t0;
+    }
+    return t;
+  }
+  return function(x) {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    return sy(solve(x));
+  };
+}
+const tangramEaseInOut = tangramCubicBezier(0.4, 0, 0.2, 1);
 
 const DEF_COLORS_LIGHT = ['#F8FAFC', '#FFFFFF', '#0F172A', '#4B51F6', '#E2E8F0'];
 const DEF_COLORS_DARK = ['#0B0E13', '#161B22', '#F0F6FC', '#38BDF8', '#30363D'];
@@ -34,6 +106,7 @@ const SERVICES = [
 ];
 
 class Component extends BaseLogic {
+
   state = {
     tab: 'colors',
     paletteMode: 'light', // 'light' | 'dark'
@@ -80,8 +153,12 @@ class Component extends BaseLogic {
     authName: '',
     authError: '',
     status: '',
-    confirmModal: null
+    confirmModal: null,
+    tangramRunning: false,
+    tangramSpeed: 1.0,
+    tangramBgMode: 'theme'
   };
+
 
   componentDidMount() {
     try {
@@ -305,6 +382,167 @@ class Component extends BaseLogic {
     });
   }
 
+  // --- MÉTODOS CONTROLADORES DE PREVISUALIZACIÓN TANGRAM ---
+  tangramAnimId = null;
+  tangramStartTime = null;
+  tangramLooping = false;
+  lastTangramStep = 0;
+
+  getTangramPolygons = () => {
+    return [1, 2, 3, 4, 5, 6, 7]
+      .map(i => document.getElementById('admin-tp-' + i))
+      .filter(Boolean);
+  };
+
+  syncTangramColors = () => {
+    const polys = this.getTangramPolygons();
+    if (!polys.length) return;
+    const isDark = this.state.paletteMode === 'dark';
+    const activeId = isDark ? this.state.activeDarkId : this.state.activeLightId;
+    const getModeOfPalette = p => {
+      if (p.mode) return p.mode;
+      if (p.id >= 100 || /dark|oscuro|noche|midnight|cyberpunk|oled/i.test(p.name || '')) return 'dark';
+      return 'light';
+    };
+    const modePals = (this.state.palettes || []).filter(p => getModeOfPalette(p) === this.state.paletteMode);
+    const activePal = modePals.find(p => p.id === activeId) || modePals[0];
+    const c = this.state.form ? this.state.form.colors : (activePal ? activePal.colors : (isDark ? DEF_COLORS_DARK : DEF_COLORS_LIGHT));
+    const pieceColors = [c[0], c[1], c[3], c[0], c[1], c[4], c[2]];
+    const strokeColor = isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(0, 0, 0, 0.16)';
+    polys.forEach((p, idx) => {
+      if (p && pieceColors[idx]) {
+        p.style.fill = pieceColors[idx];
+        p.style.stroke = strokeColor;
+        p.style.strokeWidth = '1px';
+      }
+    });
+  };
+
+  startTangramLoop = () => {
+    this.tangramLooping = true;
+    this.tangramStartTime = null;
+    this.setState({ tangramRunning: true, status: 'Tangram: Bucle iniciado (reproduciendo indefinidamente)' });
+
+    setTimeout(() => this.syncTangramColors(), 10);
+
+    const render = (now) => {
+      if (!this.tangramLooping) return;
+      if (!this.tangramStartTime) this.tangramStartTime = now;
+      const elapsed = (now - this.tangramStartTime) * (this.state.tangramSpeed || 1.0);
+      const fullCycle = TANGRAM_STEP_DURATION * TANGRAM_SEQUENCE.length;
+      const cycleProgress = elapsed % fullCycle;
+      const stepIndex = Math.floor(cycleProgress / TANGRAM_STEP_DURATION);
+      const nextIndex = (stepIndex + 1) % TANGRAM_SEQUENCE.length;
+      const timeInStep = cycleProgress % TANGRAM_STEP_DURATION;
+
+      let progress = 0;
+      if (timeInStep < TANGRAM_TRANSITION_MS) {
+        progress = tangramEaseInOut(timeInStep / TANGRAM_TRANSITION_MS);
+      } else {
+        progress = 1.0;
+      }
+
+      if (this.lastTangramStep !== stepIndex) {
+        this.lastTangramStep = stepIndex;
+        const stepEl = document.getElementById('admin-tangram-current-fig-label');
+        if (stepEl) {
+          const names = [
+            'Figura 1 · Canino (Silueta #8)',
+            'Figura 2 · Diamante / Flecha (Silueta #9)',
+            'Figura 3 · Estrella / Flor (Silueta #109)'
+          ];
+          stepEl.textContent = names[stepIndex] || ('Figura ' + (stepIndex + 1));
+        }
+      }
+
+      const fromFig = TANGRAM_FIGURES[TANGRAM_SEQUENCE[stepIndex]];
+      const toFig = TANGRAM_FIGURES[TANGRAM_SEQUENCE[nextIndex]];
+      const polys = this.getTangramPolygons();
+
+      for (let i = 0; i < 7; i++) {
+        const poly = polys[i];
+        if (!poly) continue;
+        const fromPts = fromFig[i];
+        const toPts = toFig[i];
+        let ptsStr = '';
+        for (let v = 0; v < 4; v++) {
+          const x = fromPts[v][0] + (toPts[v][0] - fromPts[v][0]) * progress;
+          const y = fromPts[v][1] + (toPts[v][1] - fromPts[v][1]) * progress;
+          ptsStr += `${x.toFixed(2)},${y.toFixed(2)} `;
+        }
+        poly.setAttribute('points', ptsStr.trim());
+      }
+
+      this.tangramAnimId = requestAnimationFrame(render);
+    };
+
+    if (this.tangramAnimId) cancelAnimationFrame(this.tangramAnimId);
+    this.tangramAnimId = requestAnimationFrame(render);
+  };
+
+  stopTangramLoop = () => {
+    this.tangramLooping = false;
+    if (this.tangramAnimId) {
+      cancelAnimationFrame(this.tangramAnimId);
+      this.tangramAnimId = null;
+    }
+    this.tangramStartTime = null;
+    this.setState({ tangramRunning: false, status: 'Tangram: Bucle en pausa' });
+  };
+
+  toggleTangramLoop = () => {
+    if (this.tangramLooping) {
+      this.stopTangramLoop();
+    } else {
+      this.startTangramLoop();
+    }
+  };
+
+  setTangramFigure = (figIndex) => {
+    const key = TANGRAM_SEQUENCE[figIndex];
+    const fig = TANGRAM_FIGURES[key];
+    if (!fig) return;
+    const polys = this.getTangramPolygons();
+    for (let i = 0; i < 7; i++) {
+      const poly = polys[i];
+      if (!poly) continue;
+      const pts = fig[i];
+      let ptsStr = '';
+      for (let v = 0; v < 4; v++) {
+        ptsStr += `${pts[v][0]},${pts[v][1]} `;
+      }
+      poly.setAttribute('points', ptsStr.trim());
+    }
+    this.lastTangramStep = figIndex;
+    const stepEl = document.getElementById('admin-tangram-current-fig-label');
+    if (stepEl) {
+      const names = [
+        'Figura 1 · Canino (Silueta #8)',
+        'Figura 2 · Diamante / Flecha (Silueta #9)',
+        'Figura 3 · Estrella / Flor (Silueta #109)'
+      ];
+      stepEl.textContent = names[figIndex] || ('Figura ' + (figIndex + 1));
+    }
+    if (this.tangramLooping) {
+      this.tangramStartTime = performance.now() - (figIndex * TANGRAM_STEP_DURATION);
+    }
+  };
+
+  setTangramSpeed = (spd) => {
+    this.setState({ tangramSpeed: spd });
+  };
+
+  setTangramBgMode = (mode) => {
+    this.setState({ tangramBgMode: mode });
+  };
+
+  goTangram = () => {
+    this.setState({ tab: 'tangram' }, () => {
+      this.syncTangramColors();
+    });
+    setTimeout(() => this.syncTangramColors(), 60);
+  };
+
   renderVals() {
     const st = this.state;
     const isDarkMode = st.paletteMode === 'dark';
@@ -372,6 +610,13 @@ class Component extends BaseLogic {
     const lCta = pub.colors[3];
     const lBorder = pub.colors[4];
 
+    // Cálculos para la previsualización del Tangram
+    let tangramCanvasBg = isDarkMode ? (cBg || '#0b0e13') : '#ffffff';
+    if (st.tangramBgMode === 'white') tangramCanvasBg = '#ffffff';
+    if (st.tangramBgMode === 'dark') tangramCanvasBg = '#0b0e13';
+    if (st.tangramBgMode === 'dominant') tangramCanvasBg = cBg;
+    if (st.tangramBgMode === 'surface') tangramCanvasBg = cSurface;
+
     return {
       hasConfirmModal: !!st.confirmModal,
       confirmTitle: st.confirmModal ? st.confirmModal.title : '',
@@ -386,11 +631,77 @@ class Component extends BaseLogic {
 
       isColors: st.tab === 'colors',
       isType: st.tab === 'type',
-      goColors: () => this.setState({ tab: 'colors' }),
-      goType: () => this.setState({ tab: 'type' }),
+      isTangram: st.tab === 'tangram',
+      goColors: () => {
+        if (this.tangramLooping) this.stopTangramLoop();
+        this.setState({ tab: 'colors' });
+      },
+      goType: () => {
+        if (this.tangramLooping) this.stopTangramLoop();
+        this.setState({ tab: 'type' });
+      },
+      goTangram: this.goTangram,
       tabColorsStyle: tab(st.tab === 'colors'),
       tabTypeStyle: tab(st.tab === 'type'),
+      tabTangramStyle: tab(st.tab === 'tangram'),
       statusText: st.status,
+
+      // Propiedades y métodos del módulo Tangram
+      isTangramRunning: !!st.tangramRunning,
+      isTangramStopped: !st.tangramRunning,
+      tangramRunning: st.tangramRunning,
+      tangramLoopBtnText: st.tangramRunning ? '⏸ Detener bucle' : '▶ Iniciar bucle',
+      tangramLoopBtnStyle: {
+        background: st.tangramRunning ? '#dc2626' : '#4B51F6',
+        color: '#fff',
+        border: 0,
+        borderRadius: '12px',
+        padding: '14px 26px',
+        font: '700 15px Archivo, sans-serif',
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        boxShadow: st.tangramRunning ? '0 8px 20px rgba(220,38,38,0.3)' : '0 8px 20px rgba(75,81,246,0.3)',
+        transition: 'all .2s ease'
+      },
+      toggleTangramLoop: this.toggleTangramLoop,
+
+      tangramFig1: () => this.setTangramFigure(0),
+      tangramFig2: () => this.setTangramFigure(1),
+      tangramFig3: () => this.setTangramFigure(2),
+
+      tangramSpeed: st.tangramSpeed || 1.0,
+      setSpeed05: () => this.setTangramSpeed(0.5),
+      setSpeed10: () => this.setTangramSpeed(1.0),
+      setSpeed15: () => this.setTangramSpeed(1.5),
+      setSpeed20: () => this.setTangramSpeed(2.0),
+
+      tangramBgMode: st.tangramBgMode || 'theme',
+      setBgTheme: () => this.setTangramBgMode('theme'),
+      setBgWhite: () => this.setTangramBgMode('white'),
+      setBgDark: () => this.setTangramBgMode('dark'),
+      setBgDominant: () => this.setTangramBgMode('dominant'),
+      setBgSurface: () => this.setTangramBgMode('surface'),
+
+      tangramCanvasBg,
+      tangramStroke: isDarkMode ? 'rgba(255, 255, 255, 0.22)' : 'rgba(0, 0, 0, 0.16)',
+      tangramC1: cBg,
+      tangramC2: cSurface,
+      tangramC3: cText,
+      tangramC4: cCta,
+      tangramC5: cBorder,
+
+      tangramPiecesList: [
+        { id: 1, name: 'Triángulo Grande 1 (TL1)', role: '1. Dominante (60%)', color: cBg, desc: 'Lomo continuo horizontal del animal' },
+        { id: 2, name: 'Triángulo Grande 2 (TL2)', role: '2. Superficie (20%)', color: cSurface, desc: 'Torso y caída posterior angular a 45°' },
+        { id: 3, name: 'Triángulo Mediano (TM)', role: '4. Acento / CTA (10%)', color: cCta, desc: 'Hocico y cabeza afilada proyectada' },
+        { id: 4, name: 'Triángulo Pequeño 1 (TS1)', role: '1. Dominante (60%)', color: cBg, desc: 'Pezuña y base de pata delantera' },
+        { id: 5, name: 'Triángulo Pequeño 2 (TS2)', role: '2. Superficie (20%)', color: cSurface, desc: 'Pie y apoyo de pata trasera' },
+        { id: 6, name: 'Cuadrado Central (SQ)', role: '5. Neutro / Bordes (10%)', color: cBorder, desc: 'Corvejón y masa posterior' },
+        { id: 7, name: 'Paralelogramo (PA)', role: '3. Texto / Lectura', color: cText, desc: 'Pata delantera extendida a 45°' }
+      ],
+
 
       paletteMode: st.paletteMode,
       modeTitle: isDarkMode ? 'Modo Oscuro' : 'Modo Claro',
@@ -717,7 +1028,9 @@ class Component extends BaseLogic {
   <div style="max-width:1240px;margin:0 auto;padding:28px 34px 0;display:flex;gap:10px;flex-wrap:wrap">
     <button sc-camel-on-click="{{ goColors }}" style="{{ tabColorsStyle }}">1 · Configuración Colores</button>
     <button sc-camel-on-click="{{ goType }}" style="{{ tabTypeStyle }}">2 · Configuración Textos / Tipografía</button>
+    <button sc-camel-on-click="{{ goTangram }}" style="{{ tabTangramStyle }}">3 · Previsualización Tangram</button>
   </div>
+
 
   <!-- MÓDULO 1: COLORES -->
   <sc-if value="{{ isColors }}" hint-placeholder-val="{{ true }}">
@@ -1027,6 +1340,205 @@ class Component extends BaseLogic {
     </section>
   </main>
   </sc-if>
+
+  <!-- MÓDULO 3: PREVISUALIZACIÓN TANGRAM -->
+  <sc-if value="{{ isTangram }}" hint-placeholder-val="{{ false }}">
+  <main style="max-width:1240px;margin:0 auto;padding:22px 34px 0;display:flex;flex-direction:column;gap:22px">
+
+    <!-- Card Principal de Previsualización y Control del Bucle -->
+    <section style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;padding:26px;overflow:hidden">
+      
+      <!-- Encabezado de la Sección -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:20px">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:#4B51F6;background:rgba(75,81,246,.08);border:1px solid rgba(75,81,246,.2);padding:4px 10px;border-radius:999px">Loader Oficial UnoPago</span>
+            <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(15,23,42,.45)">7 Polígonos SVG Morphing</span>
+          </div>
+          <h2 style="margin:8px 0 4px;font-size:24px;font-weight:800;letter-spacing:-.025em;color:#0f172a">Previsualización del Tangram ({{ modeTitle }})</h2>
+          <p style="margin:0;font-size:14px;color:rgba(15,23,42,.65);max-width:680px">
+            Controla y visualiza en tiempo real la animación geométrica continua de morphing con los 5 roles cromáticos de la paleta activa.
+          </p>
+        </div>
+
+        <!-- Botón para alternar paleta Claro/Oscuro -->
+        <button sc-camel-on-click="{{ togglePaletteMode }}" style="{{ modeBtnStyle }}">
+          {{ modeBtnText }}
+        </button>
+      </div>
+
+      <!-- Barra de Acción Principal con Botón Iniciar Bucle y Estado -->
+      <div style="background:#f8fafc;border:1px solid rgba(15,23,42,.08);border-radius:16px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px">
+        
+        <!-- Botón Principal: INICIAR / DETENER BUCLE INDEFINIDO -->
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <button sc-camel-on-click="{{ toggleTangramLoop }}" style="{{ tangramLoopBtnStyle }}">
+            {{ tangramLoopBtnText }}
+          </button>
+
+          <!-- Badge Indicador de Reproducción -->
+          <sc-if value="{{ isTangramRunning }}" hint-placeholder-val="{{ false }}">
+            <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#065f46;padding:8px 16px;border-radius:999px;font:600 14px Archivo,sans-serif">
+              <span class="pulsing-dot-green"></span>
+              <span>Bucle en reproducción indefinida</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ isTangramStopped }}" hint-placeholder-val="{{ true }}">
+            <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(100,116,139,.1);border:1px solid rgba(100,116,139,.2);color:#475569;padding:8px 16px;border-radius:999px;font:600 14px Archivo,sans-serif">
+              <span class="dot-idle"></span>
+              <span>Bucle en pausa · Haz clic en Iniciar bucle</span>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- Indicador de la Figura Activa -->
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:13px;color:rgba(15,23,42,.5);font-weight:600">Silueta:</span>
+          <span id="admin-tangram-current-fig-label" style="font-size:14px;font-weight:700;color:#0f172a;background:#fff;border:1px solid rgba(15,23,42,.12);padding:6px 14px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.04)">
+            Figura 1 · Canino (Silueta #8)
+          </span>
+        </div>
+      </div>
+
+      <!-- Lienzo Principal del Tangram SVG y Controles de Inspección -->
+      <div style="display:grid;grid-template-columns:1fr;gap:24px">
+        
+        <!-- Contenedor del Lienzo SVG -->
+        <div style="background:{{ tangramCanvasBg }};border:1px solid rgba(15,23,42,.12);border-radius:18px;padding:36px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:360px;position:relative;transition:background .3s ease,box-shadow .3s ease;box-shadow:inset 0 2px 8px rgba(0,0,0,.02)">
+          
+          <!-- Botonera superior flotante de Fondo del Lienzo -->
+          <div style="position:absolute;top:14px;right:14px;display:flex;gap:6px;align-items:center;background:rgba(255,255,255,.9);backdrop-filter:blur(6px);padding:4px 8px;border-radius:999px;border:1px solid rgba(15,23,42,.1);box-shadow:0 2px 6px rgba(0,0,0,.04)">
+            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:rgba(15,23,42,.45);margin-right:4px">Fondo:</span>
+            <button sc-camel-on-click="{{ setBgTheme }}" style="background:transparent;border:0;padding:4px 8px;font:600 12px Archivo,sans-serif;color:#0f172a;cursor:pointer;border-radius:6px" title="Fondo del tema">Tema</button>
+            <button sc-camel-on-click="{{ setBgWhite }}" style="background:transparent;border:0;padding:4px 8px;font:600 12px Archivo,sans-serif;color:#0f172a;cursor:pointer;border-radius:6px" title="Fondo blanco puro">Blanco</button>
+            <button sc-camel-on-click="{{ setBgDark }}" style="background:transparent;border:0;padding:4px 8px;font:600 12px Archivo,sans-serif;color:#0f172a;cursor:pointer;border-radius:6px" title="Fondo oscuro puro">Oscuro</button>
+            <button sc-camel-on-click="{{ setBgDominant }}" style="background:transparent;border:0;padding:4px 8px;font:600 12px Archivo,sans-serif;color:#0f172a;cursor:pointer;border-radius:6px" title="Color 1 Dominante">Dominante</button>
+            <button sc-camel-on-click="{{ setBgSurface }}" style="background:transparent;border:0;padding:4px 8px;font:600 12px Archivo,sans-serif;color:#0f172a;cursor:pointer;border-radius:6px" title="Color 2 Superficie">Superficie</button>
+          </div>
+
+          <!-- SVG Oficial del Tangram con los 7 polígonos -->
+          <svg class="admin-tangram-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-label="Previsualización Tangram Loader">
+            <!-- Pieza 1: TL1 (Color 1 - Dominante) -->
+            <polygon id="admin-tp-1" class="admin-t-piece" points="55,65 140,65 97.5,107.5 97.5,107.5" style="fill:{{ tangramC1 }};stroke:{{ tangramStroke }};stroke-width:1px"></polygon>
+            <!-- Pieza 2: TL2 (Color 2 - Superficie) -->
+            <polygon id="admin-tp-2" class="admin-t-piece" points="97.5,107.5 140,65 182.5,107.5 182.5,107.5" style="fill:{{ tangramC2 }};stroke:{{ tangramStroke }};stroke-width:1px"></polygon>
+            <!-- Pieza 3: TM (Color 4 - Acento / CTA) -->
+            <polygon id="admin-tp-3" class="admin-t-piece" points="15,65 55,65 55,107.5 55,107.5" style="fill:{{ tangramC4 }};stroke:{{ tangramStroke }};stroke-width:1px"></polygon>
+            <!-- Pieza 4: TS1 (Color 1 - Dominante) -->
+            <polygon id="admin-tp-4" class="admin-t-piece" points="10,155 40,155 25,137.5 25,137.5" style="fill:{{ tangramC1 }};stroke:{{ tangramStroke }};stroke-width:1px"></polygon>
+            <!-- Pieza 5: TS2 (Color 2 - Superficie) -->
+            <polygon id="admin-tp-5" class="admin-t-piece" points="122.5,137.5 152.5,137.5 152.5,107.5 152.5,107.5" style="fill:{{ tangramC2 }};stroke:{{ tangramStroke }};stroke-width:1px"></polygon>
+            <!-- Pieza 6: SQ (Color 5 - Neutro / Bordes) -->
+            <polygon id="admin-tp-6" class="admin-t-piece" points="152.5,107.5 182.5,107.5 182.5,137.5 152.5,137.5" style="fill:{{ tangramC5 }};stroke:{{ tangramStroke }};stroke-width:1px"></polygon>
+            <!-- Pieza 7: PA (Color 3 - Texto / Lectura) -->
+            <polygon id="admin-tp-7" class="admin-t-piece" points="25,137.5 55,137.5 85,107.5 55,107.5" style="fill:{{ tangramC3 }};stroke:{{ tangramStroke }};stroke-width:1px"></polygon>
+          </svg>
+
+          <!-- Controles de Silueta Directa y Velocidad al pie del Lienzo -->
+          <div style="margin-top:28px;display:flex;gap:16px;flex-wrap:wrap;justify-content:center;align-items:center">
+            
+            <!-- Siluetas Directas -->
+            <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.9);backdrop-filter:blur(6px);border:1px solid rgba(15,23,42,.12);border-radius:12px;padding:6px 10px;box-shadow:0 2px 8px rgba(0,0,0,.04)">
+              <span style="font-size:12px;font-weight:700;color:rgba(15,23,42,.5);padding:0 6px">Siluetas fijas:</span>
+              <button sc-camel-on-click="{{ tangramFig1 }}" style="background:#f1f5f9;border:1px solid rgba(15,23,42,.1);border-radius:8px;padding:6px 12px;font:600 13px Archivo,sans-serif;color:#0f172a;cursor:pointer" style-hover="background:#e2e8f0">1 · Canino</button>
+              <button sc-camel-on-click="{{ tangramFig2 }}" style="background:#f1f5f9;border:1px solid rgba(15,23,42,.1);border-radius:8px;padding:6px 12px;font:600 13px Archivo,sans-serif;color:#0f172a;cursor:pointer" style-hover="background:#e2e8f0">2 · Diamante</button>
+              <button sc-camel-on-click="{{ tangramFig3 }}" style="background:#f1f5f9;border:1px solid rgba(15,23,42,.1);border-radius:8px;padding:6px 12px;font:600 13px Archivo,sans-serif;color:#0f172a;cursor:pointer" style-hover="background:#e2e8f0">3 · Estrella</button>
+            </div>
+
+            <!-- Selector de Velocidad -->
+            <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.9);backdrop-filter:blur(6px);border:1px solid rgba(15,23,42,.12);border-radius:12px;padding:6px 10px;box-shadow:0 2px 8px rgba(0,0,0,.04)">
+              <span style="font-size:12px;font-weight:700;color:rgba(15,23,42,.5);padding:0 6px">Velocidad:</span>
+              <button sc-camel-on-click="{{ setSpeed05 }}" style="border-radius:8px;padding:6px 10px;font:600 12px Archivo,sans-serif;cursor:pointer;{{ speed05Style }}">0.5x</button>
+              <button sc-camel-on-click="{{ setSpeed10 }}" style="border-radius:8px;padding:6px 10px;font:600 12px Archivo,sans-serif;cursor:pointer;{{ speed10Style }}">1.0x</button>
+              <button sc-camel-on-click="{{ setSpeed15 }}" style="border-radius:8px;padding:6px 10px;font:600 12px Archivo,sans-serif;cursor:pointer;{{ speed15Style }}">1.5x</button>
+              <button sc-camel-on-click="{{ setSpeed20 }}" style="border-radius:8px;padding:6px 10px;font:600 12px Archivo,sans-serif;cursor:pointer;{{ speed20Style }}">2.0x</button>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Sección de Mapeo Cromático de las 7 Piezas y Ficha Técnica -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:22px">
+      
+      <!-- Card: Mapeo de Colores de las 7 Piezas -->
+      <section style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;padding:24px">
+        <h3 style="margin:0 0 4px;font-size:18px;font-weight:700;letter-spacing:-.02em;color:#0f172a">Mapeo de las 7 Piezas Tangram</h3>
+        <p style="margin:0 0 16px;font-size:13px;color:rgba(15,23,42,.6)">
+          Distribución de los 5 roles cromáticos UnoPago en la geometría del loader:
+        </p>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ tangramPiecesList }}" as="item" hint-placeholder-count="7">
+            <div style="display:flex;align-items:center;gap:12px;border:1px solid rgba(15,23,42,.08);background:#f8fafc;border-radius:12px;padding:10px 14px">
+              <span style="width:28px;height:28px;border-radius:8px;background:{{ item.color }};border:1px solid rgba(0,0,0,.15);flex:none;box-shadow:0 1px 3px rgba(0,0,0,.08)"></span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:14px;font-weight:600;color:#0f172a;display:flex;align-items:center;gap:8px">
+                  <span>{{ item.name }}</span>
+                </div>
+                <div style="font-size:12px;color:rgba(15,23,42,.55);margin-top:2px">{{ item.desc }}</div>
+              </div>
+              <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.06em;color:#4B51F6;background:rgba(75,81,246,.08);padding:4px 8px;border-radius:6px;white-space:nowrap">{{ item.role }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- Card: Especificaciones Técnicas y Parámetros de Animación -->
+      <section style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:16px">
+        <div>
+          <h3 style="margin:0 0 4px;font-size:18px;font-weight:700;letter-spacing:-.02em;color:#0f172a">Especificaciones de Animación</h3>
+          <p style="margin:0 0 16px;font-size:13px;color:rgba(15,23,42,.6)">
+            Parámetros cinéticos configurados para la interpolación fluida de polígonos:
+          </p>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px;flex:1">
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(15,23,42,.08);padding-bottom:10px">
+            <span style="font-size:13px;color:rgba(15,23,42,.65)">Curva de Easing</span>
+            <span style="font:600 12px ui-monospace,Menlo,monospace;color:#0f172a;background:#f1f5f9;padding:4px 8px;border-radius:6px">cubic-bezier(0.4, 0, 0.2, 1)</span>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(15,23,42,.08);padding-bottom:10px">
+            <span style="font-size:13px;color:rgba(15,23,42,.65)">Duración de Morphing</span>
+            <span style="font:600 13px Archivo,sans-serif;color:#0f172a">900 ms (~0.9s suave)</span>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(15,23,42,.08);padding-bottom:10px">
+            <span style="font-size:13px;color:rgba(15,23,42,.65)">Pausa Estática por Silueta</span>
+            <span style="font:600 13px Archivo,sans-serif;color:#0f172a">350 ms (fijación visual)</span>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(15,23,42,.08);padding-bottom:10px">
+            <span style="font-size:13px;color:rgba(15,23,42,.65)">Duración Total por Fase</span>
+            <span style="font:600 13px Archivo,sans-serif;color:#0f172a">1250 ms</span>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(15,23,42,.08);padding-bottom:10px">
+            <span style="font-size:13px;color:rgba(15,23,42,.65)">Ciclo Completo (3 Siluetas)</span>
+            <span style="font:600 13px Archivo,sans-serif;color:#0f172a">3750 ms (3.75s)</span>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(15,23,42,.08);padding-bottom:10px">
+            <span style="font-size:13px;color:rgba(15,23,42,.65)">Modo de Reproducción</span>
+            <span style="font:700 12px ui-monospace,Menlo,monospace;color:#10b981;background:rgba(16,185,129,.1);padding:4px 8px;border-radius:6px">Bucle Infinito Continuo</span>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:13px;color:rgba(15,23,42,.65)">Espacio Vectorial</span>
+            <span style="font:600 12px ui-monospace,Menlo,monospace;color:#0f172a;background:#f1f5f9;padding:4px 8px;border-radius:6px">viewBox="0 0 200 200"</span>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+
+  </main>
+  </sc-if>
+
 
   <section style="max-width:1240px;margin:26px auto 0;padding:0 34px">
     <div style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;overflow:hidden">
