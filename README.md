@@ -46,14 +46,24 @@ unopago-landing-rework/
 ├── landing.html          # Entrypoint principal de la Landing Page pública
 ├── admin.html            # Panel de Administración de Colores y Tipografías
 ├── css/
-│   ├── landing.css       # Estilos específicos de la Landing Page
+│   ├── landing.css       # Tokens de respaldo de la Landing (5 roles + escala tipográfica)
 │   └── styles.css        # Estilos generales del Panel de Administración
 ├── js/
 │   ├── app.js            # Lógica y estado React / DC-Runtime del Admin Panel
-│   ├── landing.js        # Lógica, sincronización de temas y tipografías de la Landing
+│   ├── landing.js        # Lógica de la Landing: pantalla de carga, temas, tipografías y carrusel
 │   └── vendor/           # Librerías cliente (React, ReactDOM, DC Runtime)
 └── README.md             # Documentación del proyecto
 ```
+
+> **Nota sobre `landing.js`:** DC-Runtime sólo ejecuta el bloque
+> `<script type="text/x-dc" data-dc-script>` incrustado en `landing.html`, porque
+> lee su `textContent` y un `src` externo llega vacío. `js/landing.js` es la copia
+> editable de ese mismo componente: **si tocas uno, copia el cambio al otro.**
+
+> **Pantalla de carga:** el tangram vive dentro de la plantilla `<x-dc>` y sus 7
+> piezas se pintan con `var(--c-bg)`, `var(--c-surface)`, `var(--c-text)`,
+> `var(--c-cta)` y `var(--c-border)`, así que siguen la paleta activa sin CSS ni
+> JavaScript adicional. Se controla con las props `showLoader` y `loaderSeconds`.
 
 ---
 
