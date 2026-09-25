@@ -130,6 +130,18 @@ a:hover {
   --c-cta: #4B51F6;     /* 4. Color Acento/CTA (10%) */
   --c-border: #E2E8F0;  /* 5. Color Neutro Soporte (10%) */
 
+  /* Tipografía por defecto */
+  --font-main: Archivo, Helvetica, system-ui, sans-serif;
+  --fs-logo: 30px;
+  --fs-h1: 80px;
+  --fs-section-h2: 42px;
+  --fs-h3: 22px;
+  --fs-hero-p: 24px;
+  --fs-p: 16px;
+  --fs-btn: 15px;
+  --fs-sm: 13px;
+  --fs-tag: 13px;
+
   /* Mapeo de compatibilidad */
   --bg: var(--c-bg);
   --surface: var(--c-surface);
@@ -182,3 +194,69 @@ a:hover {
   --ftcard: var(--c-surface);
   --ftcard2: var(--c-surface);
 }
+
+/* ==========================================================================
+   Pantalla de Carga Completa (Fullscreen Tangram Loader) con Paleta Dinámica
+   ========================================================================== */
+:root {
+  --loader-bg: #ffffff;
+  --tangram-c1: #F8FAFC;
+  --tangram-c2: #FFFFFF;
+  --tangram-c3: #0F172A;
+  --tangram-c4: #4B51F6;
+  --tangram-c5: #E2E8F0;
+  --tangram-stroke: rgba(0, 0, 0, 0.15);
+}
+
+#loader-screen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--loader-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100000;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, visibility;
+}
+
+#loader-screen.fade-out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.tangram-loader-svg {
+  width: 160px;
+  height: 160px;
+  max-width: 80vw;
+  max-height: 80vw;
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.08));
+}
+
+/* 7 Piezas coloreadas según la paleta del panel de Admin:
+   - Colores 1 y 2 asignados a 4 triángulos (t-1, t-4 con Color 1 / t-2, t-5 con Color 2)
+   - Colores 3, 4 y 5 asignados a los 3 triángulos restantes (t-7 con Color 3, t-3 con Color 4, t-6 con Color 5) */
+.t-piece.t-1 { fill: var(--tangram-c1); }
+.t-piece.t-2 { fill: var(--tangram-c2); }
+.t-piece.t-3 { fill: var(--tangram-c4); }
+.t-piece.t-4 { fill: var(--tangram-c1); }
+.t-piece.t-5 { fill: var(--tangram-c2); }
+.t-piece.t-6 { fill: var(--tangram-c5); }
+.t-piece.t-7 { fill: var(--tangram-c3); }
+
+.t-piece {
+  stroke: var(--tangram-stroke, rgba(0, 0, 0, 0.16));
+  stroke-width: 1px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  transition: fill 0.4s ease, stroke 0.4s ease;
+}
+

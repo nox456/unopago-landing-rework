@@ -63,7 +63,8 @@ class Component extends BaseLogic {
     authPassword: '',
     authName: '',
     authError: '',
-    status: ''
+    status: '',
+    confirmModal: null
   };
 
   componentDidMount() {
@@ -162,11 +163,26 @@ class Component extends BaseLogic {
     }
   };
 
+  askConfirm(config) {
+    this.setState({ confirmModal: config });
+  }
+
+  closeConfirm = () => {
+    this.setState({ confirmModal: null });
+  };
+
   handleLogout = () => {
-    try {
-      localStorage.removeItem('unopago-session-v1');
-    } catch (e) {}
-    this.setState({ currentUser: null, authEmail: '', authPassword: '', authName: '', authError: '', status: 'Sesión cerrada.' });
+    this.askConfirm({
+      title: '¿Cerrar sesión activa?',
+      message: 'Esta acción cerrará tu sesión actual y eliminará las credenciales activas en este navegador (localStorage).',
+      confirmText: 'Cerrar Sesión',
+      onConfirm: () => {
+        try {
+          localStorage.removeItem('unopago-session-v1');
+        } catch (e) {}
+        this.setState({ currentUser: null, authEmail: '', authPassword: '', authName: '', authError: '', status: 'Sesión cerrada.' });
+      }
+    });
   };
 
   persist(extra) {
@@ -341,6 +357,17 @@ class Component extends BaseLogic {
     const lBorder = pub.colors[4];
 
     return {
+      hasConfirmModal: !!st.confirmModal,
+      confirmTitle: st.confirmModal ? st.confirmModal.title : '',
+      confirmMessage: st.confirmModal ? st.confirmModal.message : '',
+      confirmBtnText: st.confirmModal ? (st.confirmModal.confirmText || 'Confirmar') : 'Confirmar',
+      onConfirmAction: () => {
+        const cb = st.confirmModal && st.confirmModal.onConfirm;
+        this.closeConfirm();
+        if (cb) cb();
+      },
+      onCancelConfirm: this.closeConfirm,
+
       isColors: st.tab === 'colors',
       isType: st.tab === 'type',
       goColors: () => this.setState({ tab: 'colors' }),
@@ -405,6 +432,7 @@ class Component extends BaseLogic {
       previewFont,
       svcCards: SERVICES.map((s, i) => ({ color: cCta, title: s.title, body: s.body, tag: s.tag })),
       h1px: cur.h1 + 'px', h3px: cur.h3 + 'px', ppx: cur.p + 'px',
+      tagpx: Math.max(10, Math.round(cur.p * 0.82)) + 'px',
       typePreviewNote: tf
         ? (st.tediting === 'new' ? 'Nueva tipografía en edición' : 'Tipografía en edición')
         : 'Tipografía cargada en el sitio: “' + activeType.name + '”',
@@ -471,11 +499,18 @@ class Component extends BaseLogic {
           },
           remove: () => {
             if (isActive) return;
-            this.setState(s => {
-              const palettes = s.palettes.filter(x => x.id !== p.id);
-              this.persist({ palettes });
-              const currentModeCount = palettes.filter(x => getModeOfPalette(x) === s.paletteMode).length;
-              return { palettes, palPage: Math.min(s.palPage, Math.max(0, Math.ceil(currentModeCount / PER_PAGE) - 1)), editing: s.editing === p.id ? null : s.editing, form: s.editing === p.id ? null : s.form };
+            this.askConfirm({
+              title: '¿Eliminar paleta de colores?',
+              message: 'Se eliminará permanentemente la paleta “' + p.name + '” del almacenamiento local (localStorage). Esta acción no se puede deshacer.',
+              confirmText: 'Eliminar Paleta',
+              onConfirm: () => {
+                this.setState(s => {
+                  const palettes = s.palettes.filter(x => x.id !== p.id);
+                  this.persist({ palettes });
+                  const currentModeCount = palettes.filter(x => getModeOfPalette(x) === s.paletteMode).length;
+                  return { palettes, palPage: Math.min(s.palPage, Math.max(0, Math.ceil(currentModeCount / PER_PAGE) - 1)), editing: s.editing === p.id ? null : s.editing, form: s.editing === p.id ? null : s.form, status: 'Paleta “' + p.name + '” eliminada de localStorage.' };
+                });
+              }
             });
           }
         };
@@ -551,10 +586,17 @@ class Component extends BaseLogic {
           },
           remove: () => {
             if (isActive) return;
-            this.setState(s => {
-              const types = s.types.filter(x => x.id !== t.id);
-              this.persist({ types });
-              return { types, typPage: Math.min(s.typPage, Math.max(0, Math.ceil(types.length / PER_PAGE) - 1)), tediting: s.tediting === t.id ? null : s.tediting, tform: s.tediting === t.id ? null : s.tform };
+            this.askConfirm({
+              title: '¿Eliminar estilo de tipografía?',
+              message: 'Se eliminará permanentemente el estilo “' + t.name + '” del almacenamiento local (localStorage). Esta acción no se puede deshacer.',
+              confirmText: 'Eliminar Tipografía',
+              onConfirm: () => {
+                this.setState(s => {
+                  const types = s.types.filter(x => x.id !== t.id);
+                  this.persist({ types });
+                  return { types, typPage: Math.min(s.typPage, Math.max(0, Math.ceil(types.length / PER_PAGE) - 1)), tediting: s.tediting === t.id ? null : s.tediting, tform: s.tediting === t.id ? null : s.tform, status: 'Tipografía “' + t.name + '” eliminada de localStorage.' };
+                });
+              }
             });
           }
         };
@@ -568,7 +610,8 @@ class Component extends BaseLogic {
       lp: pub.p + 'px',
       publicCards: SERVICES.map((s, i) => ({
         bg: lCta, title: s.title, body: s.body, tag: s.tag,
-        titleSize: pub.h3 + 'px', bodySize: pub.p + 'px'
+        titleSize: pub.h3 + 'px', bodySize: pub.p + 'px',
+        tagSize: Math.max(10, Math.round(pub.p * 0.82)) + 'px'
       }))
     };
   }

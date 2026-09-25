@@ -160,9 +160,9 @@ class Component extends BaseLogic {
       }
     ` : '';
 
-    const h1Base = type.h1 || 40;
-    const h3Base = type.h3 || 22;
-    const pBase = type.p || 16;
+    const h1Base = Number(type.h1) || 40;
+    const h3Base = Number(type.h3) || 22;
+    const pBase = Number(type.p) || 16;
 
     const scaleH1 = h1Base / 40;
     const scaleH3 = h3Base / 22;
@@ -172,14 +172,17 @@ class Component extends BaseLogic {
       ${fontFace}
       :root, [data-theme], [data-theme="dark"], [data-theme="light"] {
         --font-main: ${familyCss};
+        --fs-logo: ${Math.round(30 * scaleH1)}px;
         --fs-h1: ${Math.round(80 * scaleH1)}px;
-        --fs-section-h2: ${Math.round(42 * scaleH3)}px;
-        --fs-h3: ${Math.round(21 * scaleH3)}px;
+        --fs-section-h2: ${Math.round(42 * scaleH1)}px;
+        --fs-h3: ${Math.round(22 * scaleH3)}px;
         --fs-hero-p: ${Math.round(24 * scaleP)}px;
         --fs-p: ${Math.round(16 * scaleP)}px;
-        --fs-sm: ${Math.round(14 * scaleP)}px;
+        --fs-btn: ${Math.round(15 * scaleP)}px;
+        --fs-sm: ${Math.max(10, Math.round(13 * scaleP))}px;
+        --fs-tag: ${Math.max(10, Math.round(13 * scaleP))}px;
       }
-      body, button, input, select, textarea {
+      *, *::before, *::after {
         font-family: var(--font-main) !important;
       }
     `;

@@ -19,6 +19,9 @@
   <!-- Lógica de la Landing -->
   <script src="js/landing.js"></script>
 
+  <!-- Pantalla de Carga (Tangram Loader) -->
+  <script src="js/tangram-loader.js"></script>
+
   <!-- Script de configuración interpretado por DC-Runtime -->
   <script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean","section":"Tema"}}'>
 const BaseLogic = (typeof DCLogic !== 'undefined' ? DCLogic : (typeof window !== 'undefined' && window.DCLogic ? window.DCLogic : class {}));
@@ -183,9 +186,9 @@ class Component extends BaseLogic {
       }
     ` : '';
 
-    const h1Base = type.h1 || 40;
-    const h3Base = type.h3 || 22;
-    const pBase = type.p || 16;
+    const h1Base = Number(type.h1) || 40;
+    const h3Base = Number(type.h3) || 22;
+    const pBase = Number(type.p) || 16;
 
     const scaleH1 = h1Base / 40;
     const scaleH3 = h3Base / 22;
@@ -195,14 +198,17 @@ class Component extends BaseLogic {
       ${fontFace}
       :root, [data-theme], [data-theme="dark"], [data-theme="light"] {
         --font-main: ${familyCss};
+        --fs-logo: ${Math.round(30 * scaleH1)}px;
         --fs-h1: ${Math.round(80 * scaleH1)}px;
-        --fs-section-h2: ${Math.round(42 * scaleH3)}px;
-        --fs-h3: ${Math.round(21 * scaleH3)}px;
+        --fs-section-h2: ${Math.round(42 * scaleH1)}px;
+        --fs-h3: ${Math.round(22 * scaleH3)}px;
         --fs-hero-p: ${Math.round(24 * scaleP)}px;
         --fs-p: ${Math.round(16 * scaleP)}px;
-        --fs-sm: ${Math.round(14 * scaleP)}px;
+        --fs-btn: ${Math.round(15 * scaleP)}px;
+        --fs-sm: ${Math.max(10, Math.round(13 * scaleP))}px;
+        --fs-tag: ${Math.max(10, Math.round(13 * scaleP))}px;
       }
-      body, button, input, select, textarea {
+      *, *::before, *::after {
         font-family: var(--font-main) !important;
       }
     `;
@@ -317,13 +323,26 @@ class Component extends BaseLogic {
   </script>
 </head>
 <body>
+  <!-- Pantalla de Carga Completa (Fullscreen Tangram Loader) -->
+  <div id="loader-screen" role="status" aria-live="polite" aria-label="Cargando plataforma UnoPago">
+    <svg class="tangram-loader-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <polygon class="t-piece t-1" id="tp-1" points="55,65 140,65 97.5,107.5 97.5,107.5"></polygon>
+      <polygon class="t-piece t-2" id="tp-2" points="97.5,107.5 140,65 182.5,107.5 182.5,107.5"></polygon>
+      <polygon class="t-piece t-3" id="tp-3" points="15,65 55,65 55,107.5 55,107.5"></polygon>
+      <polygon class="t-piece t-4" id="tp-4" points="10,155 40,155 25,137.5 25,137.5"></polygon>
+      <polygon class="t-piece t-5" id="tp-5" points="122.5,137.5 152.5,137.5 152.5,107.5 152.5,107.5"></polygon>
+      <polygon class="t-piece t-6" id="tp-6" points="152.5,107.5 182.5,107.5 182.5,137.5 152.5,137.5"></polygon>
+      <polygon class="t-piece t-7" id="tp-7" points="25,137.5 55,137.5 85,107.5 55,107.5"></polygon>
+    </svg>
+  </div>
+
   <x-dc>
 <div data-theme="{{ theme }}" style="background:var(--c-bg);color:var(--c-text);min-height:100vh;transition:background .35s ease,color .35s ease">
 
   <!-- 2. Superficie (Header - 20%) -->
   <header style="background:var(--c-surface);border-bottom:1px solid var(--c-border);color:var(--c-text);display:flex;align-items:center;flex-wrap:wrap;gap:20px 40px;padding:18px 40px">
-    <div style="font-size:30px;font-weight:800;letter-spacing:-.02em;flex:none;color:var(--c-text)">Uno<span style="color:var(--c-cta)">Pago</span></div>
-    <nav style="display:flex;flex-wrap:wrap;gap:14px 30px;flex:1 1 320px;min-width:0;font-size:var(--fs-p, 15px);font-weight:500;color:var(--c-text)">
+    <div style="font-size:var(--fs-logo, 30px);font-weight:800;letter-spacing:-.02em;flex:none;color:var(--c-text)">Uno<span style="color:var(--c-cta)">Pago</span></div>
+    <nav style="display:flex;flex-wrap:wrap;gap:14px 30px;flex:1 1 320px;min-width:0;font-size:var(--fs-btn, 15px);font-weight:500;color:var(--c-text)">
       <a href="#" style="color:inherit" style-hover="color:var(--c-cta)">Para escuelas</a>
       <a href="#" style="color:inherit" style-hover="color:var(--c-cta)">Para padres</a>
       <a href="#" style="color:inherit" style-hover="color:var(--c-cta)">¿Cómo funciona?</a>
@@ -335,9 +354,9 @@ class Component extends BaseLogic {
     <div style="display:flex;align-items:center;flex-wrap:wrap;gap:14px;flex:0 1 auto">
       <button sc-camel-on-click="{{ toggleTheme }}" aria-label="Cambiar tema" title="Cambiar modo claro / oscuro" style="width:44px;height:44px;border-radius:999px;border:1px solid var(--c-border);background:var(--c-surface);color:var(--c-text);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1;transition:background .2s,border-color .2s" style-hover="border-color:var(--c-cta)"><span style="{{ iconStyle }}"></span></button>
       <!-- 4. Acción Primaria / CTA (10%) -->
-      <a href="#" style="background:var(--c-cta);color:#fff;padding:14px 26px;border-radius:999px;font-size:var(--fs-p, 15px);font-weight:600" style-hover="opacity:.9">Solicitar Demo</a>
+      <a href="#" style="background:var(--c-cta);color:var(--c-surface);padding:14px 26px;border-radius:999px;font-size:var(--fs-btn, 15px);font-weight:600" style-hover="opacity:.9">Solicitar Demo</a>
       <!-- 5. Acciones Secundarias / Bordes -->
-      <a href="admin.html" style="background:var(--c-surface);color:var(--c-text);border:1px solid var(--c-border);padding:14px 30px;border-radius:999px;font-size:var(--fs-p, 15px);font-weight:600" style-hover="border-color:var(--c-cta)">Ingresar</a>
+      <a href="admin.html" style="background:var(--c-surface);color:var(--c-text);border:1px solid var(--c-border);padding:14px 30px;border-radius:999px;font-size:var(--fs-btn, 15px);font-weight:600" style-hover="border-color:var(--c-cta)">Ingresar</a>
     </div>
   </header>
 
@@ -349,16 +368,16 @@ class Component extends BaseLogic {
         <p style="margin:28px 0 0;max-width:560px;font-size:var(--fs-hero-p, 24px);line-height:1.42;color:var(--c-text);opacity:.82;text-wrap:pretty">Una solución digital simple, confiable y adaptada a tu realidad.</p>
         <div style="display:flex;gap:20px;margin-top:48px;flex-wrap:wrap">
           <!-- 4. CTA Botones de Tienda -->
-          <a href="#" style="display:flex;align-items:center;gap:16px;background:var(--c-cta);color:#fff;border-radius:14px;padding:16px 30px;transition:opacity .2s,transform .2s" style-hover="opacity:.9;transform:translateY(-2px)">
+          <a href="#" style="display:flex;align-items:center;gap:16px;background:var(--c-cta);color:var(--c-surface);border-radius:14px;padding:16px 30px;transition:opacity .2s,transform .2s" style-hover="opacity:.9;transform:translateY(-2px)">
             <svg width="28" height="32" viewBox="0 0 170 170" fill="currentColor">
               <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.82.25-9.74-1.85-14.77-6.32-3.3-2.9-7.22-7.6-11.77-14.09-6.1-8.68-10.9-18.49-14.4-29.41-3.5-10.93-5.26-21.2-5.26-30.82 0-14.09 3.56-25.79 10.67-35.12 7.11-9.33 16.03-14.07 26.78-14.22 4.97 0 10.23 1.25 15.77 3.75 5.54 2.5 9.4 3.79 11.58 3.87 1.83 0 5.86-1.37 12.09-4.12 6.23-2.75 11.75-4 16.56-3.75 12.27.97 21.84 5.57 28.71 13.8-10.91 6.64-16.27 15.66-16.08 27.06.2 9.07 3.74 16.65 10.62 22.75 6.88 6.1 15.11 9.47 24.69 10.12-2.52 7.42-6 15.02-10.45 22.81zM119.22 31.84c0-7.25 2.67-14.2 8.01-20.84 5.34-6.64 12.1-10.68 20.28-12.13.25 1.05.37 2.02.37 2.9 0 7.37-2.73 14.43-8.19 21.18-5.46 6.75-12.29 10.82-20.47 12.22-.12-1.05-.18-2.15-.18-3.33z"/>
             </svg>
             <span style="display:flex;flex-direction:column;line-height:1.15">
-              <span style="font-size:var(--fs-sm, 12px);letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.85)">Descárgalo en</span>
-              <span style="font-size:var(--fs-h3, 24px);font-weight:700">App Store</span>
+              <span style="font-size:var(--fs-sm, 12px);letter-spacing:.09em;text-transform:uppercase;color:var(--c-surface);opacity:.85">Descárgalo en</span>
+              <span style="font-size:var(--fs-h3, 24px);font-weight:700;color:var(--c-surface)">App Store</span>
             </span>
           </a>
-          <a href="#" style="display:flex;align-items:center;gap:16px;background:var(--c-cta);color:#fff;border-radius:14px;padding:16px 30px;transition:opacity .2s,transform .2s" style-hover="opacity:.9;transform:translateY(-2px)">
+          <a href="#" style="display:flex;align-items:center;gap:16px;background:var(--c-cta);color:var(--c-surface);border-radius:14px;padding:16px 30px;transition:opacity .2s,transform .2s" style-hover="opacity:.9;transform:translateY(-2px)">
             <svg width="26" height="28" viewBox="0 0 24 24" fill="none">
               <path d="M3.609 1.814L13.792 12 3.61 22.186a1.99 1.99 0 0 1-1.11-1.786V3.6a1.99 1.99 0 0 1 1.109-1.786z" fill="#00E676"/>
               <path d="M17.438 8.354l-3.646 3.646 3.646 3.646 4.108-2.347c1.173-.67 1.173-2.628 0-3.298l-4.108-2.347z" fill="#FFC107"/>
@@ -366,8 +385,8 @@ class Component extends BaseLogic {
               <path d="M13.792 12L3.61 22.186c.465.342 1.056.444 1.606.082l12.222-6.984L13.792 12z" fill="#E91E63"/>
             </svg>
             <span style="display:flex;flex-direction:column;line-height:1.15">
-              <span style="font-size:var(--fs-sm, 12px);letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.85)">Descárgalo en</span>
-              <span style="font-size:var(--fs-h3, 24px);font-weight:700">Google Play</span>
+              <span style="font-size:var(--fs-sm, 12px);letter-spacing:.09em;text-transform:uppercase;color:var(--c-surface);opacity:.85">Descárgalo en</span>
+              <span style="font-size:var(--fs-h3, 24px);font-weight:700;color:var(--c-surface)">Google Play</span>
             </span>
           </a>
         </div>
@@ -376,15 +395,15 @@ class Component extends BaseLogic {
       <!-- 2. Superficie Mockup (20%) -->
       <div style="position:relative;align-self:end;padding-top:40px">
         <div style="position:relative;background:var(--c-surface);border:1px solid var(--c-border);border-top-left-radius:16px;border-top-right-radius:16px;height:520px;display:flex;align-items:center;justify-content:center">
-          <span style="font:500 13px ui-monospace,Menlo,monospace;letter-spacing:.06em;color:var(--c-text);background:var(--c-bg);border:1px solid var(--c-border);padding:10px 16px;border-radius:8px">dashboard + app shot</span>
+          <span style="font-family:var(--font-main);font-size:var(--fs-sm, 13px);font-weight:500;letter-spacing:.06em;color:var(--c-text);background:var(--c-bg);border:1px solid var(--c-border);padding:10px 16px;border-radius:8px">dashboard + app shot</span>
         </div>
       </div>
     </div>
   </section>
 
   <!-- 4. Botón Flotante Fijo de Ayuda (CTA - 10%) -->
-  <div style="position:fixed;right:28px;bottom:28px;z-index:9999;display:flex;align-items:center;gap:12px;background:var(--c-cta);color:#fff;padding:14px 24px 14px 18px;border-radius:999px;box-shadow:0 12px 32px rgba(0,0,0,.28);font-size:var(--fs-p, 16px);font-weight:600;cursor:pointer;transition:transform .2s ease,opacity .2s ease" style-hover="transform:translateY(-3px);opacity:.95">
-    <div style="width:36px;height:36px;border-radius:999px;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center">
+  <div style="position:fixed;right:28px;bottom:28px;z-index:9999;display:flex;align-items:center;gap:12px;background:var(--c-cta);color:var(--c-surface);padding:14px 24px 14px 18px;border-radius:999px;box-shadow:0 12px 32px rgba(0,0,0,.28);font-size:var(--fs-p, 16px);font-weight:600;cursor:pointer;transition:transform .2s ease,opacity .2s ease" style-hover="transform:translateY(-3px);opacity:.95">
+    <div style="width:36px;height:36px;border-radius:999px;background:rgba(255,255,255,.22);color:var(--c-surface);display:flex;align-items:center;justify-content:center">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
     </div>
     ¿Necesitas Ayuda?
@@ -395,7 +414,7 @@ class Component extends BaseLogic {
     <sc-for list="{{ cards }}" as="c" hint-placeholder-count="3">
       <div style="background:var(--c-surface);border:1px solid var(--c-border);border-radius:16px;padding:28px 26px;transition:transform .2s ease,box-shadow .2s ease" style-hover="transform:translateY(-3px);box-shadow:0 14px 34px rgba(0,0,0,.08)">
         <!-- 4. Acento / CTA para ícono (10%) -->
-        <div style="width:48px;height:48px;border-radius:12px;background:var(--c-cta);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,.12)" sc-camel-dangerously-set-inner-html="{{ c.svg }}"></div>
+        <div style="width:48px;height:48px;border-radius:12px;background:var(--c-cta);color:var(--c-surface);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,.12)" sc-camel-dangerously-set-inner-html="{{ c.svg }}"></div>
         <!-- 3. Texto / Lectura (Contenido) -->
         <h3 style="margin:20px 0 8px;font-size:var(--fs-h3, 21px);font-weight:700;letter-spacing:-.01em;color:var(--c-text)">{{ c.title }}</h3>
         <p style="margin:0;font-size:var(--fs-p, 16px);line-height:1.5;color:var(--c-text);opacity:.78;text-wrap:pretty">{{ c.body }}</p>
@@ -410,7 +429,7 @@ class Component extends BaseLogic {
       <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap">
         <div>
           <!-- 4. Color Acento (10%) -->
-          <span style="display:inline-block;font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--c-cta)">Servicios</span>
+          <span style="display:inline-block;font-family:var(--font-main);font-size:var(--fs-sm, 11px);font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--c-cta)">Servicios</span>
           <!-- 3. Color Texto (Contenido) -->
           <h2 style="margin:12px 0 0;font-size:var(--fs-section-h2, 42px);line-height:1.08;font-weight:800;letter-spacing:-.03em;max-width:640px;color:var(--c-text);text-wrap:balance">Todo lo que UnoPago resuelve para tu institución</h2>
         </div>
@@ -427,12 +446,12 @@ class Component extends BaseLogic {
             <!-- 2. Superficie Cards (20%) -->
             <article style="flex:0 0 clamp(260px,calc(25% - 16.5px),340px);scroll-snap-align:start;background:var(--c-surface);border:1px solid var(--c-border);border-radius:18px;padding:28px 26px 30px;display:flex;flex-direction:column;gap:14px;transition:border-color .25s" style-hover="border-color:var(--c-cta)">
               <!-- 4. Color Acento (10%) -->
-              <div style="width:48px;height:48px;border-radius:12px;background:var(--c-cta);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.15)" sc-camel-dangerously-set-inner-html="{{ s.svg }}"></div>
+              <div style="width:48px;height:48px;border-radius:12px;background:var(--c-cta);color:var(--c-surface);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.15)" sc-camel-dangerously-set-inner-html="{{ s.svg }}"></div>
               <!-- 3. Color Texto (Contenido) -->
               <h3 style="margin:0;font-size:var(--fs-h3, 22px);font-weight:700;letter-spacing:-.015em;color:var(--c-text)">{{ s.title }}</h3>
               <p style="margin:0;font-size:var(--fs-p, 15px);line-height:1.55;color:var(--c-text);opacity:.78;text-wrap:pretty">{{ s.body }}</p>
               <!-- 5. Bordes / Estructura -->
-              <span style="margin-top:auto;font:600 13px Archivo,sans-serif;color:var(--c-text);opacity:.8;border-top:1px solid var(--c-border);padding-top:14px">{{ s.tag }}</span>
+              <span style="margin-top:auto;font-family:var(--font-main);font-size:var(--fs-tag, 13px);font-weight:600;color:var(--c-text);opacity:.8;border-top:1px solid var(--c-border);padding-top:14px">{{ s.tag }}</span>
             </article>
           </sc-for>
         </div>
@@ -447,24 +466,24 @@ class Component extends BaseLogic {
       <!-- 5. Neutro de Soporte (Bordes y Estructura - 10%) -->
       <div style="margin-top:64px;padding-top:44px;border-top:1px solid var(--c-border);display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:36px">
         <div>
-          <div style="font-size:30px;font-weight:800;letter-spacing:-.02em;color:var(--c-text)">Uno<span style="color:var(--c-cta)">Pago</span></div>
+          <div style="font-size:var(--fs-logo, 30px);font-weight:800;letter-spacing:-.02em;color:var(--c-text)">Uno<span style="color:var(--c-cta)">Pago</span></div>
           <p style="margin:14px 0 0;font-size:var(--fs-p, 15px);line-height:1.55;color:var(--c-text);opacity:.75;max-width:260px">Cobros escolares simples, confiables y adaptados a tu realidad.</p>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
-          <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--c-cta)">Servicios</span>
+          <span style="font-family:var(--font-main);font-size:var(--fs-sm, 11px);font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--c-cta)">Servicios</span>
           <a href="#" style="color:var(--c-text);opacity:.78;font-size:var(--fs-p, 15px)" style-hover="opacity:1;color:var(--c-cta)">Cobranza escolar</a>
           <a href="#" style="color:var(--c-text);opacity:.78;font-size:var(--fs-p, 15px)" style-hover="opacity:1;color:var(--c-cta)">Pagos móviles</a>
           <a href="#" style="color:var(--c-text);opacity:.78;font-size:var(--fs-p, 15px)" style-hover="opacity:1;color:var(--c-cta)">Conciliación bancaria</a>
           <a href="#" style="color:var(--c-text);opacity:.78;font-size:var(--fs-p, 15px)" style-hover="opacity:1;color:var(--c-cta)">Donaciones</a>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
-          <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--c-cta)">Empresa</span>
+          <span style="font-family:var(--font-main);font-size:var(--fs-sm, 11px);font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--c-cta)">Empresa</span>
           <a href="#" style="color:var(--c-text);opacity:.78;font-size:var(--fs-p, 15px)" style-hover="opacity:1;color:var(--c-cta)">Nosotros</a>
           <a href="#" style="color:var(--c-text);opacity:.78;font-size:var(--fs-p, 15px)" style-hover="opacity:1;color:var(--c-cta)">Blog</a>
           <a href="#" style="color:var(--c-text);opacity:.78;font-size:var(--fs-p, 15px)" style-hover="opacity:1;color:var(--c-cta)">Ayuda</a>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
-          <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--c-cta)">Contacto</span>
+          <span style="font-family:var(--font-main);font-size:var(--fs-sm, 11px);font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--c-cta)">Contacto</span>
           <a href="#" style="color:var(--c-text);opacity:.78;font-size:var(--fs-p, 15px)" style-hover="opacity:1;color:var(--c-cta)">hola@unopago.com</a>
           <a href="#" style="color:var(--c-text);opacity:.78;font-size:var(--fs-p, 15px)" style-hover="opacity:1;color:var(--c-cta)">Solicitar demo</a>
         </div>

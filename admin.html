@@ -79,7 +79,8 @@ class Component extends BaseLogic {
     authPassword: '',
     authName: '',
     authError: '',
-    status: ''
+    status: '',
+    confirmModal: null
   };
 
   componentDidMount() {
@@ -178,11 +179,26 @@ class Component extends BaseLogic {
     }
   };
 
+  askConfirm(config) {
+    this.setState({ confirmModal: config });
+  }
+
+  closeConfirm = () => {
+    this.setState({ confirmModal: null });
+  };
+
   handleLogout = () => {
-    try {
-      localStorage.removeItem('unopago-session-v1');
-    } catch (e) {}
-    this.setState({ currentUser: null, authEmail: '', authPassword: '', authName: '', authError: '', status: 'Sesión cerrada.' });
+    this.askConfirm({
+      title: '¿Cerrar sesión activa?',
+      message: 'Esta acción cerrará tu sesión actual y eliminará las credenciales activas en este navegador (localStorage).',
+      confirmText: 'Cerrar Sesión',
+      onConfirm: () => {
+        try {
+          localStorage.removeItem('unopago-session-v1');
+        } catch (e) {}
+        this.setState({ currentUser: null, authEmail: '', authPassword: '', authName: '', authError: '', status: 'Sesión cerrada.' });
+      }
+    });
   };
 
   persist(extra) {
@@ -357,6 +373,17 @@ class Component extends BaseLogic {
     const lBorder = pub.colors[4];
 
     return {
+      hasConfirmModal: !!st.confirmModal,
+      confirmTitle: st.confirmModal ? st.confirmModal.title : '',
+      confirmMessage: st.confirmModal ? st.confirmModal.message : '',
+      confirmBtnText: st.confirmModal ? (st.confirmModal.confirmText || 'Confirmar') : 'Confirmar',
+      onConfirmAction: () => {
+        const cb = st.confirmModal && st.confirmModal.onConfirm;
+        this.closeConfirm();
+        if (cb) cb();
+      },
+      onCancelConfirm: this.closeConfirm,
+
       isColors: st.tab === 'colors',
       isType: st.tab === 'type',
       goColors: () => this.setState({ tab: 'colors' }),
@@ -421,6 +448,7 @@ class Component extends BaseLogic {
       previewFont,
       svcCards: SERVICES.map((s, i) => ({ color: cCta, title: s.title, body: s.body, tag: s.tag })),
       h1px: cur.h1 + 'px', h3px: cur.h3 + 'px', ppx: cur.p + 'px',
+      tagpx: Math.max(10, Math.round(cur.p * 0.82)) + 'px',
       typePreviewNote: tf
         ? (st.tediting === 'new' ? 'Nueva tipografía en edición' : 'Tipografía en edición')
         : 'Tipografía cargada en el sitio: “' + activeType.name + '”',
@@ -490,11 +518,18 @@ class Component extends BaseLogic {
           },
           remove: () => {
             if (isActive) return;
-            this.setState(s => {
-              const palettes = s.palettes.filter(x => x.id !== p.id);
-              this.persist({ palettes });
-              const currentModeCount = palettes.filter(x => getModeOfPalette(x) === s.paletteMode).length;
-              return { palettes, palPage: Math.min(s.palPage, Math.max(0, Math.ceil(currentModeCount / PER_PAGE) - 1)), editing: s.editing === p.id ? null : s.editing, form: s.editing === p.id ? null : s.form };
+            this.askConfirm({
+              title: '¿Eliminar paleta de colores?',
+              message: 'Se eliminará permanentemente la paleta “' + p.name + '” del almacenamiento local (localStorage). Esta acción no se puede deshacer.',
+              confirmText: 'Eliminar Paleta',
+              onConfirm: () => {
+                this.setState(s => {
+                  const palettes = s.palettes.filter(x => x.id !== p.id);
+                  this.persist({ palettes });
+                  const currentModeCount = palettes.filter(x => getModeOfPalette(x) === s.paletteMode).length;
+                  return { palettes, palPage: Math.min(s.palPage, Math.max(0, Math.ceil(currentModeCount / PER_PAGE) - 1)), editing: s.editing === p.id ? null : s.editing, form: s.editing === p.id ? null : s.form, status: 'Paleta “' + p.name + '” eliminada de localStorage.' };
+                });
+              }
             });
           }
         };
@@ -570,10 +605,17 @@ class Component extends BaseLogic {
           },
           remove: () => {
             if (isActive) return;
-            this.setState(s => {
-              const types = s.types.filter(x => x.id !== t.id);
-              this.persist({ types });
-              return { types, typPage: Math.min(s.typPage, Math.max(0, Math.ceil(types.length / PER_PAGE) - 1)), tediting: s.tediting === t.id ? null : s.tediting, tform: s.tediting === t.id ? null : s.tform };
+            this.askConfirm({
+              title: '¿Eliminar estilo de tipografía?',
+              message: 'Se eliminará permanentemente el estilo “' + t.name + '” del almacenamiento local (localStorage). Esta acción no se puede deshacer.',
+              confirmText: 'Eliminar Tipografía',
+              onConfirm: () => {
+                this.setState(s => {
+                  const types = s.types.filter(x => x.id !== t.id);
+                  this.persist({ types });
+                  return { types, typPage: Math.min(s.typPage, Math.max(0, Math.ceil(types.length / PER_PAGE) - 1)), tediting: s.tediting === t.id ? null : s.tediting, tform: s.tediting === t.id ? null : s.tform, status: 'Tipografía “' + t.name + '” eliminada de localStorage.' };
+                });
+              }
             });
           }
         };
@@ -587,7 +629,8 @@ class Component extends BaseLogic {
       lp: pub.p + 'px',
       publicCards: SERVICES.map((s, i) => ({
         bg: lCta, title: s.title, body: s.body, tag: s.tag,
-        titleSize: pub.h3 + 'px', bodySize: pub.p + 'px'
+        titleSize: pub.h3 + 'px', bodySize: pub.p + 'px',
+        tagSize: Math.max(10, Math.round(pub.p * 0.82)) + 'px'
       }))
     };
   }
@@ -705,7 +748,7 @@ class Component extends BaseLogic {
                 </div>
                 <div style="font-size:{{ h3px }};font-weight:700;line-height:1.2;letter-spacing:-.015em;color:{{ cText }}">{{ sv.title }}</div>
                 <div style="font-size:{{ ppx }};line-height:1.5;color:{{ cText }};opacity:.78">{{ sv.body }}</div>
-                <span style="margin-top:auto;font-size:12px;font-weight:600;color:{{ cText }};opacity:.8;border-top:1px solid {{ cBorder }};padding-top:10px">{{ sv.tag }}</span>
+                <span style="margin-top:auto;font-size:{{ tagpx }};font-weight:600;color:{{ cText }};opacity:.8;border-top:1px solid {{ cBorder }};padding-top:10px">{{ sv.tag }}</span>
               </div>
             </sc-for>
           </div>
@@ -839,7 +882,7 @@ class Component extends BaseLogic {
               <div style="width:40px;height:40px;border-radius:11px;background:{{ sv.color }}"></div>
               <div style="font-size:{{ h3px }};font-weight:700;line-height:1.2;color:{{ cText }}">{{ sv.title }}</div>
               <div style="font-size:{{ ppx }};line-height:1.5;color:{{ cText }};opacity:.78">{{ sv.body }}</div>
-              <span style="margin-top:auto;font-size:12px;font-weight:600;color:{{ cText }};opacity:.8;border-top:1px solid {{ cBorder }};padding-top:10px">{{ sv.tag }}</span>
+              <span style="margin-top:auto;font-size:{{ tagpx }};font-weight:600;color:{{ cText }};opacity:.8;border-top:1px solid {{ cBorder }};padding-top:10px">{{ sv.tag }}</span>
             </div>
           </sc-for>
         </div>
@@ -1015,7 +1058,7 @@ class Component extends BaseLogic {
                 <div style="width:44px;height:44px;border-radius:12px;background:{{ pc.bg }}"></div>
                 <div style="font-size:{{ pc.titleSize }};font-weight:700;line-height:1.2;letter-spacing:-.015em;color:{{ lText }}">{{ pc.title }}</div>
                 <div style="font-size:{{ pc.bodySize }};line-height:1.5;color:{{ lText }};opacity:.78">{{ pc.body }}</div>
-                <span style="margin-top:auto;font-size:13px;font-weight:600;color:{{ lText }};opacity:.8;border-top:1px solid {{ lBorder }};padding-top:12px">{{ pc.tag }}</span>
+                <span style="margin-top:auto;font-size:{{ pc.tagSize }};font-weight:600;color:{{ lText }};opacity:.8;border-top:1px solid {{ lBorder }};padding-top:12px">{{ pc.tag }}</span>
               </div>
             </sc-for>
           </div>
@@ -1029,6 +1072,44 @@ class Component extends BaseLogic {
     </div>
   </section>
 </div>
+</sc-if>
+
+<!-- Modal de Alerta y Confirmación Centrado con Fondo Difuminado -->
+<sc-if value="{{ hasConfirmModal }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(15,23,42,0.65);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;animation:dcFadeIn .2s ease-out">
+    <div style="background:#ffffff;border:1px solid rgba(255,255,255,0.3);border-radius:24px;padding:36px 32px 30px;max-width:460px;width:100%;box-shadow:0 25px 60px -12px rgba(0,0,0,0.45), 0 0 0 1px rgba(15,23,42,0.06);text-align:center;font-family:Archivo,sans-serif;box-sizing:border-box;animation:dcScaleUp .25s cubic-bezier(0.16,1,0.3,1)">
+      
+      <!-- Badge de Alerta / Advertencia con Ícono SVG -->
+      <div style="width:64px;height:64px;border-radius:20px;background:#fef2f2;border:1.5px solid #fee2e2;color:#ef4444;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 8px 20px -4px rgba(239,68,68,0.25)">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </div>
+
+      <!-- Título de la Alerta -->
+      <h3 style="margin:0 0 12px;font-size:22px;font-weight:800;letter-spacing:-.025em;color:#0f172a">
+        {{ confirmTitle }}
+      </h3>
+
+      <!-- Mensaje Detallado -->
+      <p style="margin:0 0 28px;font-size:15px;line-height:1.55;color:#475569;text-wrap:pretty">
+        {{ confirmMessage }}
+      </p>
+
+      <!-- Botones de Acción -->
+      <div style="display:flex;gap:12px;justify-content:center">
+        <button sc-camel-on-click="{{ onCancelConfirm }}" style="flex:1;background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;border-radius:12px;padding:14px 20px;font:600 15px Archivo,sans-serif;cursor:pointer;transition:all .2s ease" style-hover="background:#e2e8f0;color:#0f172a">
+          Cancelar
+        </button>
+        <button sc-camel-on-click="{{ onConfirmAction }}" style="flex:1;background:#dc2626;color:#ffffff;border:0;border-radius:12px;padding:14px 20px;font:600 15px Archivo,sans-serif;cursor:pointer;box-shadow:0 6px 18px rgba(220,38,38,0.35);transition:all .2s ease" style-hover="background:#b91c1c;transform:translateY(-1px)">
+          {{ confirmBtnText }}
+        </button>
+      </div>
+
+    </div>
+  </div>
 </sc-if>
 
   </x-dc>
