@@ -15,61 +15,67 @@
   'use strict';
 
   // 1. Definición exacta de coordenadas de los 7 polígonos en viewBox="0 0 200 200"
-  // Cada polígono se representa con 4 puntos [x, y] (para triángulos el 4to punto duplica el 3ro)
+  // Identificadores de las 7 piezas canónicas del Tangram:
+  //  0: TL1 (Triángulo Grande 1) - Catetos: 64, Hipotenusa: 64√2 (4u)
+  //  1: TL2 (Triángulo Grande 2) - Catetos: 64, Hipotenusa: 64√2 (4u)
+  //  2: TM  (Triángulo Mediano)  - Catetos: 32√2 (2u), Hipotenusa: 64 (2√2u)
+  //  3: TS1 (Triángulo Pequeño 1)- Catetos: 32 (√2u), Hipotenusa: 32√2 (2u)
+  //  4: TS2 (Triángulo Pequeño 2)- Catetos: 32 (√2u), Hipotenusa: 32√2 (2u)
+  //  5: SQ  (Cuadrado)           - Lado: 32 (√2u)
+  //  6: PAR (Paralelogramo)      - Base: 32, Inclinación 45°: 32√2 (2u)
   const TANGRAM_FIGURES = {
-    // Figura 1 (Silueta #8 Canónica): Cuadrúpedo / animal angular
-    // Lomo horizontal continuo sin hendiduras, hocico afilado, pata delantera a 45° y pata trasera con pie plano
+    // Figura 1: Tangram #8 (Cuadrúpedo / Animal con lomo horizontal continuo)
     fig1: [
-      // t-1: TL1 (Lomo central con hipotenusa horizontal continua)
-      [[55, 65], [140, 65], [97.5, 107.5], [97.5, 107.5]],
-      // t-2: TL2 (Torso y caída inclinada de la espalda a 45°)
-      [[97.5, 107.5], [140, 65], [182.5, 107.5], [182.5, 107.5]],
-      // t-3: TM (Hocico / cabeza afilada proyectada a la izquierda)
-      [[15, 65], [55, 65], [55, 107.5], [55, 107.5]],
-      // t-4: TS1 (Pezuña / base pata delantera)
-      [[10, 155], [40, 155], [25, 137.5], [25, 137.5]],
-      // t-5: TS2 (Pie pata trasera con corte angular hacia adentro formando el vientre)
-      [[122.5, 137.5], [152.5, 137.5], [152.5, 107.5], [152.5, 107.5]],
-      // t-6: SQ (Pantorrilla vertical / corvejón pata trasera)
-      [[152.5, 107.5], [182.5, 107.5], [182.5, 137.5], [152.5, 137.5]],
-      // t-7: PA (Pata delantera inclinada a 45° extendiéndose abajo a la izquierda)
-      [[25, 137.5], [55, 137.5], [85, 107.5], [55, 107.5]]
+      // 0: TL1 (Torso superior con cateto horizontal en el lomo y vertical a la derecha)
+      [[84, 52], [148, 52], [148, 116], [148, 116]],
+      // 1: TL2 (Torso inferior con cateto vertical a la izquierda y horizontal en vientre)
+      [[84, 52], [84, 116], [148, 116], [148, 116]],
+      // 2: TM (Grupa / Cadera trasera con ángulo de 90° a la derecha)
+      [[148, 52], [180, 84], [148, 116], [148, 116]],
+      // 3: TS1 (Hocico / Cabeza afilada proyectada horizontalmente a la izquierda)
+      [[20, 84], [52, 84], [52, 52], [52, 52]],
+      // 4: TS2 (Pata trasera apoyada en el suelo)
+      [[148, 116], [148, 148], [116, 148], [116, 148]],
+      // 5: SQ (Cuello / Nuca adyacente al hocico)
+      [[52, 52], [84, 52], [84, 84], [52, 84]],
+      // 6: PAR (Pata delantera inclinada a 45° abajo a la izquierda)
+      [[84, 116], [116, 116], [84, 148], [52, 148]]
     ],
 
-    // Figura 2 (Silueta #9): Diamante / flecha rematada por bloque cuadrado
+    // Figura 2: Tangram #9 (Diamante simétrico con remate cuadrado)
     fig2: [
-      // t-1: TL1 (Cuadrante inferior izquierdo del diamante)
-      [[40, 100], [100, 100], [100, 160], [100, 160]],
-      // t-2: TL2 (Cuadrante inferior derecho del diamante)
-      [[100, 100], [160, 100], [100, 160], [100, 160]],
-      // t-3: TM (Ala diagonal superior derecha)
-      [[100, 100], [160, 100], [130, 70], [130, 70]],
-      // t-4: TS1 (Hombro exterior izquierdo)
-      [[40, 100], [70, 100], [70, 70], [70, 70]],
-      // t-5: TS2 (Hombro interior izquierdo)
-      [[70, 100], [70, 70], [100, 70], [100, 70]],
-      // t-6: SQ (Bloque superior cuadrado centrado)
-      [[85, 70], [115, 70], [115, 40], [85, 40]],
-      // t-7: PA (Cuerpo central diagonal)
-      [[70, 100], [100, 100], [130, 70], [100, 70]]
+      // 0: TL1 (Mitad inferior izquierda del diamante)
+      [[36, 100], [100, 100], [100, 164], [100, 164]],
+      // 1: TL2 (Mitad inferior derecha del diamante)
+      [[100, 100], [164, 100], [100, 164], [100, 164]],
+      // 2: TM (Triángulo central superior apuntando hacia arriba)
+      [[68, 100], [132, 100], [100, 68], [100, 68]],
+      // 3: TS1 (Hombro derecho interior)
+      [[100, 68], [132, 68], [132, 100], [132, 100]],
+      // 4: TS2 (Hombro derecho exterior)
+      [[132, 68], [164, 100], [132, 100], [132, 100]],
+      // 5: SQ (Remate cuadrado superior centrado)
+      [[84, 36], [116, 36], [116, 68], [84, 68]],
+      // 6: PAR (Hombro izquierdo completo en paralelogramo)
+      [[36, 100], [68, 100], [100, 68], [68, 68]]
     ],
 
-    // Figura 3 (Silueta #109): Estrella quebrada / flor geométrica en movimiento
+    // Figura 3: Tangram #109 (Figura dinámica con hueco negativo central)
     fig3: [
-      // t-1: TL1 (Aspa inferior izquierda)
-      [[40, 105], [100, 105], [40, 165], [40, 165]],
-      // t-2: TL2 (Aspa inferior derecha en rotación)
-      [[100, 105], [165, 125], [120, 165], [120, 165]],
-      // t-3: TM (Punta triangular superior)
-      [[95, 35], [125, 65], [65, 65], [65, 65]],
-      // t-4: TS1 (Espolón lateral izquierdo puntiagudo)
-      [[20, 105], [40, 85], [40, 105], [40, 105]],
-      // t-5: TS2 (Aspa de anclaje inferior central)
-      [[70, 105], [100, 105], [100, 135], [100, 135]],
-      // t-6: SQ (Bloque lateral superior izquierdo)
-      [[40, 75], [70, 75], [70, 105], [40, 105]],
-      // t-7: PA (Elemento diagonal flotante a la derecha)
-      [[80, 75], [120, 75], [140, 95], [100, 95]]
+      // 0: TL1 (Masa central izquierda sosteniendo el cuadrado)
+      [[34, 130], [121, 105.05], [89.97, 161.02], [89.97, 161.02]],
+      // 1: TL2 (Masa central derecha rematando en punta a la derecha)
+      [[89.97, 161.02], [121, 105.05], [176.97, 136.08], [176.97, 136.08]],
+      // 2: TM (Corona superior central apuntando hacia arriba)
+      [[42.48, 94.28], [104, 76.64], [64.42, 54.7], [64.42, 54.7]],
+      // 3: TS1 (Punta inferior izquierda proyectada hacia abajo)
+      [[42.75, 134.85], [82.32, 156.78], [51.57, 165.6], [51.57, 165.6]],
+      // 4: TS2 (Punta inferior derecha debajo de TL2)
+      [[123.96, 151.28], [185.47, 133.65], [163.53, 173.22], [163.53, 173.22]],
+      // 5: SQ (Bloque superior izquierdo sobre TL1)
+      [[49.38, 125.59], [80.14, 116.77], [71.32, 86.01], [40.56, 94.83]],
+      // 6: PAR (Flanco superior derecho con separación/hueco respecto al cuadrado)
+      [[97.17, 118.13], [127.93, 109.31], [149.87, 69.73], [119.11, 78.55]]
     ]
   };
 
@@ -82,7 +88,7 @@
    * Implementación de alta precisión de la curva cubic-bezier(0.4, 0, 0.2, 1)
    */
   function cubicBezier(x1, y1, x2, y2) {
-    const cx = 3.0 * x1;
+    //const cx = 3.0 * x1;
     const bx = 3.0 * (x2 - x1) - cx;
     const ax = 1.0 - cx - bx;
 
@@ -146,8 +152,8 @@
         isDark = savedTheme === 'dark';
       } else {
         const rootTheme = document.documentElement.getAttribute('data-theme') ||
-                          document.body?.getAttribute('data-theme') ||
-                          document.querySelector('[data-theme]')?.getAttribute('data-theme');
+          document.body?.getAttribute('data-theme') ||
+          document.querySelector('[data-theme]')?.getAttribute('data-theme');
         isDark = rootTheme === 'dark';
       }
 
