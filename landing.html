@@ -25,7 +25,7 @@
   <script src="js/landing.js"></script>
 
   <!-- Script de configuración interpretado por DC-Runtime -->
-  <script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean","section":"Tema"},"showLoader":{"editor":"boolean","default":true,"tsType":"boolean","section":"Pantalla de carga"},"loaderSeconds":{"editor":"range","default":15,"min":1,"max":20,"step":1,"unit":"s","tsType":"number","section":"Pantalla de carga"}}'>
+  <script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean","section":"Tema"},"showLoader":{"editor":"boolean","default":true,"tsType":"boolean","section":"Pantalla de carga"},"loaderSeconds":{"editor":"range","default":3,"min":1,"max":20,"step":1,"unit":"s","tsType":"number","section":"Pantalla de carga"}}'>
 const BaseLogic = (typeof DCLogic !== 'undefined' ? DCLogic : (typeof window !== 'undefined' && window.DCLogic ? window.DCLogic : class {}));
 
 /* Devuelve un callback `ref` que inyecta el SVG del ícono en el nodo destino.
@@ -106,11 +106,31 @@ const tgEase = (() => {
   };
 })();
 
+/* Íconos del reproductor de video. Se crean una sola vez para que el `ref`
+   sea estable y solo cambie cuando cambia el estado (play/pausa, volumen). */
+const VP_ICON = {
+  play: I('<polygon points="7 4 20 12 7 20 7 4" fill="currentColor"></polygon>'),
+  pause: I('<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"></rect><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"></rect>'),
+  volHigh: I('<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>'),
+  volLow: I('<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>'),
+  volMute: I('<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line>'),
+  gear: I('<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>')
+};
+
+/* Pistas de audio del menú de opciones. */
+const VP_AUDIO = [
+  { id: 'en', label: 'Inglés' },
+  { id: 'es', label: 'Español' }
+];
+const VP_START = 0.35;    /* posición inicial de la línea de reproducción */
+const VP_PREVIEW_W = 160; /* ancho del preview al pasar sobre la línea */
+const VP_SUBTITLE = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.';
+
 const LIGHT = ['#F8FAFC', '#FFFFFF', '#0F172A', '#4B51F6', '#E2E8F0'];
 const DARK = ['#0B0E13', '#161B22', '#F0F6FC', '#38BDF8', '#30363D'];
 
 class Component extends BaseLogic {
-  state = { dark: false, slide: 0, loaderFading: false, loaderDone: false };
+  state = { dark: false, slide: 0, loaderFading: false, loaderDone: false, vStarted: false, vPlaying: false, vVolume: 0.8, vMuted: false, vMenu: false, vMenuView: 'root', vAudio: 'es', vSubs: false, vNumber: String(VP_START * 100), vProgress: VP_START, vHover: null };
 
   SERVICES = [
     { title: 'Cobranza escolar', body: 'Emite y controla mensualidades, matrículas y cuotas especiales desde un solo panel.', tag: 'Instituciones', svg: I('<path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"></path>') },
@@ -136,7 +156,7 @@ class Component extends BaseLogic {
   startLoader() {
     const show = this.props.showLoader ?? true;
     if (!show) { this.setState({ loaderDone: true }); return; }
-    const ms = (this.props.loaderSeconds ?? 15) * 1000;
+    const ms = (this.props.loaderSeconds ?? 3) * 1000;
     const t0 = performance.now();
     const tick = now => {
       if (this.state.loaderDone) return;
@@ -162,6 +182,137 @@ class Component extends BaseLogic {
     this._tgRaf = requestAnimationFrame(tick);
     this._tgT1 = setTimeout(() => this.setState({ loaderFading: true }), ms);
     this._tgT2 = setTimeout(() => this.setState({ loaderDone: true }), ms + 520);
+  }
+
+  /* ---- Reproductor de video (controles propios, sin librerías) ---- */
+
+  videoRef = el => {
+    this._video = el;
+    if (el) { el.volume = this.state.vVolume; el.muted = this.state.vMuted; }
+  };
+
+  /* Todavía no hay fuente: los controles funcionan solo con el estado y
+     se conectan al <video> real en cuanto tenga un `src`. */
+  setPlaying(play) {
+    const v = this._video;
+    if (v && v.currentSrc) {
+      if (play) v.play().catch(() => this.setState({ vPlaying: false }));
+      else v.pause();
+    }
+    this.setState({ vStarted: true, vPlaying: play, vMenu: false });
+  }
+
+  setVolume(volume, muted) {
+    const v = this._video;
+    if (v) { v.volume = volume; v.muted = muted; }
+    this.setState({ vVolume: volume, vMuted: muted });
+  }
+
+  /* Posición (0..1) del puntero sobre la línea de reproducción. */
+  seekRatio(e) {
+    const r = e.currentTarget.getBoundingClientRect();
+    return { ratio: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), x: e.clientX - r.left, width: r.width };
+  }
+
+  /* Mueve la línea de reproducción y mantiene el input numérico (0-100) al día.
+     `text` permite conservar lo que el usuario está escribiendo en el input. */
+  seek(ratio, text) {
+    const v = this._video;
+    if (v && v.duration) v.currentTime = ratio * v.duration;
+    this.setState({ vProgress: ratio, vNumber: text ?? String(Math.round(ratio * 100)) });
+  }
+
+  seekFromVideo(ratio) {
+    this.setState({ vProgress: ratio, vNumber: String(Math.round(ratio * 100)) });
+  }
+
+  videoVals() {
+    const { vStarted, vPlaying, vVolume, vMuted, vMenu, vMenuView, vAudio, vProgress, vHover } = this.state;
+    const progPct = (vProgress * 100).toFixed(2) + '%';
+    const silent = vMuted || vVolume === 0;
+    const pct = silent ? 0 : Math.round(vVolume * 100);
+    return {
+      videoRef: this.videoRef,
+      vShowThumb: !vStarted,
+      vStarted,
+      vMenuOpen: vMenu,
+      vMenuExpanded: vMenu ? 'true' : 'false',
+      vPlayIcon: vPlaying ? VP_ICON.pause : VP_ICON.play,
+      vPlayLabel: vPlaying ? 'Pausar' : 'Reproducir',
+      vVolIcon: silent ? VP_ICON.volMute : vVolume < 0.5 ? VP_ICON.volLow : VP_ICON.volHigh,
+      vMuteLabel: silent ? 'Activar sonido' : 'Silenciar',
+      vGearIcon: VP_ICON.gear,
+      vVolPct: pct,
+      vVolFill: 'linear-gradient(to right,var(--c-cta) ' + pct + '%,rgba(255,255,255,.35) ' + pct + '%)',
+      vMenuRoot: vMenuView === 'root',
+      vMenuAudio: vMenuView === 'audio',
+      vAudioLabel: VP_AUDIO.find(a => a.id === vAudio).label,
+      vAudioOptions: VP_AUDIO.map(a => ({
+        label: a.label,
+        checked: a.id === vAudio ? 'true' : 'false',
+        mark: a.id === vAudio ? '✓' : '',
+        pick: () => this.setState({ vAudio: a.id, vMenuView: 'root' })
+      })),
+      vOpenAudio: () => this.setState({ vMenuView: 'audio' }),
+      vMenuBack: () => this.setState({ vMenuView: 'root' }),
+      vSubsLabel: this.state.vSubs ? 'Activados' : 'Desactivados',
+      vSubsChecked: this.state.vSubs ? 'true' : 'false',
+      vShowSubs: vStarted && this.state.vSubs,
+      vSubtitle: VP_SUBTITLE,
+      vToggleSubs: () => this.setState(s => ({ vSubs: !s.vSubs, vMenu: false })),
+      vProgPct: progPct,
+      vProgNow: Math.round(vProgress * 100),
+      vHovering: !!vHover,
+      vHoverPct: vHover ? (vHover.ratio * 100).toFixed(2) + '%' : '0%',
+      vPreviewLeft: vHover ? vHover.left + 'px' : '0px',
+      vSeekMove: e => {
+        const { ratio, x, width } = this.seekRatio(e);
+        /* El preview se mantiene dentro de la línea, sin salirse por los bordes. */
+        const left = Math.max(0, Math.min(width - VP_PREVIEW_W, x - VP_PREVIEW_W / 2));
+        this.setState({ vHover: { ratio, left } });
+        if (e.currentTarget.hasPointerCapture && e.currentTarget.hasPointerCapture(e.pointerId)) this.seek(ratio);
+      },
+      vSeekLeave: () => this.setState({ vHover: null }),
+      vSeekDown: e => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        this.seek(this.seekRatio(e).ratio);
+      },
+      vSeekKey: e => {
+        const step = { ArrowRight: 0.05, ArrowLeft: -0.05, Home: -1, End: 1 }[e.key];
+        if (step === undefined) return;
+        e.preventDefault();
+        this.seek(Math.max(0, Math.min(1, this.state.vProgress + step)));
+      },
+      vOnTime: e => {
+        const v = e.currentTarget;
+        if (!v.duration) return;
+        /* No pisamos el input mientras el usuario está escribiendo en él. */
+        const typing = document.activeElement && document.activeElement.classList.contains('vp-num');
+        if (typing) this.setState({ vProgress: v.currentTime / v.duration });
+        else this.seekFromVideo(v.currentTime / v.duration);
+      },
+      vStart: () => this.setPlaying(true),
+      vToggle: () => this.setPlaying(!this.state.vPlaying),
+      vOnEnded: () => this.setState({ vPlaying: false }),
+      vToggleMute: () => {
+        const s = this.state;
+        if (s.vMuted || s.vVolume === 0) this.setVolume(s.vVolume || 0.5, false);
+        else this.setVolume(s.vVolume, true);
+      },
+      vOnVolume: e => {
+        const volume = Math.max(0, Math.min(1, Number(e.target.value) / 100));
+        this.setVolume(volume, volume === 0);
+      },
+      vToggleMenu: () => this.setState(s => ({ vMenu: !s.vMenu, vMenuView: 'root' })),
+      /* Se guarda como texto para permitir el campo vacío mientras se escribe. */
+      vNumber: this.state.vNumber,
+      vOnNumber: e => {
+        const raw = e.target.value;
+        if (raw === '' || isNaN(Number(raw))) { this.setState({ vNumber: raw }); return; }
+        const n = Math.max(0, Math.min(100, Number(raw)));
+        this.seek(n / 100, n === Number(raw) ? raw : String(n));
+      }
+    };
   }
 
   /* ---- Sincronización con el Panel de Administración ---- */
@@ -292,6 +443,7 @@ class Component extends BaseLogic {
       this.setState({ slide: p });
     };
     return {
+      ...this.videoVals(),
       services: this.SERVICES,
       cards: this.CARDS,
       prev: () => go(slide - 1),
@@ -411,6 +563,82 @@ if (typeof Component !== 'undefined') {
           <span style="font-family:var(--font-main);font-size:var(--fs-sm, 13px);font-weight:500;letter-spacing:.06em;color:var(--c-text);background:var(--c-bg);border:1px solid var(--c-border);padding:10px 16px;border-radius:8px">dashboard + app shot</span>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- Video de presentación: controles propios, el <video> no usa los nativos -->
+  <section style="max-width:1360px;margin:0 auto;padding:88px 40px 0">
+    <div class="vp" style="position:relative;aspect-ratio:16/9;background:var(--c-surface);border:1px solid var(--c-border);border-radius:16px;overflow:hidden;box-shadow:0 18px 44px rgba(0,0,0,.10)">
+      <video ref="{{ videoRef }}" sc-camel-on-ended="{{ vOnEnded }}" sc-camel-on-time-update="{{ vOnTime }}" playsinline preload="metadata" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:#000"></video>
+
+      <!-- Subtítulos (texto de ejemplo hasta que haya pista real) -->
+      <sc-if value="{{ vShowSubs }}" hint-placeholder-val="{{ false }}">
+        <div class="vp-subs" aria-live="polite"><span>{{ vSubtitle }}</span></div>
+      </sc-if>
+
+      <!-- Superficie clicable: alterna reproducción al tocar el video -->
+      <sc-if value="{{ vStarted }}" hint-placeholder-val="{{ false }}">
+        <div sc-camel-on-click="{{ vToggle }}" aria-hidden="true" style="position:absolute;inset:0;cursor:pointer"></div>
+      </sc-if>
+
+      <!-- Miniatura con botón central de play -->
+      <sc-if value="{{ vShowThumb }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--c-surface),var(--c-bg))">
+          <span style="position:absolute;left:24px;top:24px;font-size:var(--fs-sm, 13px);font-weight:500;letter-spacing:.06em;color:var(--c-text);background:var(--c-bg);border:1px solid var(--c-border);padding:10px 16px;border-radius:8px">miniatura del video</span>
+          <button class="vp-big" sc-camel-on-click="{{ vStart }}" aria-label="Reproducir video" style="width:96px;height:96px;border-radius:999px;border:0;background:var(--c-cta);color:var(--c-surface);display:flex;align-items:center;justify-content:center;padding:0 0 0 6px;cursor:pointer;box-shadow:0 14px 36px rgba(0,0,0,.28);transition:transform .2s ease" style-hover="transform:scale(1.07)" ref="{{ vPlayIcon }}"></button>
+        </div>
+      </sc-if>
+
+      <!-- Barra de controles -->
+      <sc-if value="{{ vStarted }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:48px 16px 14px;background:linear-gradient(to top,rgba(0,0,0,.72),rgba(0,0,0,0));color:#fff">
+          <!-- Línea de reproducción con preview al pasar el puntero -->
+          <div class="vp-seek" role="slider" tabindex="0" aria-label="Línea de reproducción" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ vProgNow }}" aria-valuetext="{{ vProgPct }}" sc-camel-on-pointer-down="{{ vSeekDown }}" sc-camel-on-pointer-move="{{ vSeekMove }}" sc-camel-on-pointer-leave="{{ vSeekLeave }}" sc-camel-on-key-down="{{ vSeekKey }}">
+            <sc-if value="{{ vHovering }}" hint-placeholder-val="{{ false }}">
+              <div aria-hidden="true" style="position:absolute;bottom:calc(100% + 12px);left:{{ vPreviewLeft }};width:160px;aspect-ratio:16/9;border-radius:8px;background:var(--c-cta);border:2px solid #fff;box-shadow:0 8px 24px rgba(0,0,0,.45);pointer-events:none"></div>
+            </sc-if>
+            <div class="vp-seek-track">
+              <sc-if value="{{ vHovering }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;left:0;top:0;bottom:0;width:{{ vHoverPct }};background:rgba(255,255,255,.35);border-radius:inherit"></div>
+              </sc-if>
+              <div style="position:absolute;left:0;top:0;bottom:0;width:{{ vProgPct }};background:var(--c-cta);border-radius:inherit"></div>
+              <div class="vp-seek-thumb" style="left:{{ vProgPct }}"></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px">
+          <div style="display:flex;align-items:center;gap:6px;min-width:0">
+            <button class="vp-btn" sc-camel-on-click="{{ vToggle }}" aria-label="{{ vPlayLabel }}" title="{{ vPlayLabel }}" ref="{{ vPlayIcon }}"></button>
+            <button class="vp-btn" sc-camel-on-click="{{ vToggleMute }}" aria-label="{{ vMuteLabel }}" title="{{ vMuteLabel }}" ref="{{ vVolIcon }}"></button>
+            <input class="vp-range" type="range" min="0" max="100" step="1" value="{{ vVolPct }}" sc-camel-on-change="{{ vOnVolume }}" aria-label="Volumen" style="background:{{ vVolFill }}">
+          </div>
+          <!-- Input numérico central (por ahora sin uso) -->
+          <input class="vp-num" type="number" inputmode="numeric" min="0" max="100" step="1" value="{{ vNumber }}" sc-camel-on-change="{{ vOnNumber }}" aria-label="Posición de reproducción (0 a 100)" title="Posición de reproducción (0 a 100)" placeholder="0">
+          <div style="position:relative;justify-self:end">
+            <button class="vp-btn" sc-camel-on-click="{{ vToggleMenu }}" aria-label="Opciones" title="Opciones" aria-haspopup="menu" aria-expanded="{{ vMenuExpanded }}" ref="{{ vGearIcon }}"></button>
+            <sc-if value="{{ vMenuOpen }}" hint-placeholder-val="{{ false }}">
+              <div role="menu" style="position:absolute;right:0;bottom:calc(100% + 10px);min-width:220px;padding:6px;border-radius:12px;background:rgba(17,20,28,.94);box-shadow:0 12px 32px rgba(0,0,0,.35)">
+                <sc-if value="{{ vMenuRoot }}" hint-placeholder-val="{{ true }}">
+                  <button class="vp-item" role="menuitem" aria-haspopup="menu" sc-camel-on-click="{{ vOpenAudio }}">
+                    <span>Pista de audio</span><span style="opacity:.65">{{ vAudioLabel }} ›</span>
+                  </button>
+                  <button class="vp-item" role="menuitemcheckbox" aria-checked="{{ vSubsChecked }}" sc-camel-on-click="{{ vToggleSubs }}">
+                    <span>Subtítulos</span><span style="opacity:.65">{{ vSubsLabel }}</span>
+                  </button>
+                </sc-if>
+                <sc-if value="{{ vMenuAudio }}" hint-placeholder-val="{{ false }}">
+                  <button class="vp-item" role="menuitem" sc-camel-on-click="{{ vMenuBack }}" style="justify-content:flex-start;font-weight:600;border-bottom:1px solid rgba(255,255,255,.12);border-radius:8px 8px 0 0;margin-bottom:4px">‹ Pista de audio</button>
+                  <sc-for list="{{ vAudioOptions }}" as="a" hint-placeholder-count="2">
+                    <button class="vp-item" role="menuitemradio" aria-checked="{{ a.checked }}" sc-camel-on-click="{{ a.pick }}">
+                      <span>{{ a.label }}</span><span style="color:var(--c-cta);font-weight:700">{{ a.mark }}</span>
+                    </button>
+                  </sc-for>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+          </div>
+        </div>
+      </sc-if>
     </div>
   </section>
 

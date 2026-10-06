@@ -65,3 +65,195 @@ a:hover {
   --c-cta: #38BDF8;     /* 4. Color Acento/CTA (10%) */
   --c-border: #30363D;  /* 5. Color Neutro Soporte (10%) */
 }
+
+/* ==========================================================================
+   Reproductor de video: controles propios (sin los nativos del navegador)
+   ========================================================================== */
+
+.vp-btn {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  transition: background .2s ease;
+}
+
+.vp-btn:hover { background: rgba(255, 255, 255, .16); }
+
+.vp-btn:focus-visible,
+.vp-big:focus-visible,
+.vp-range:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.vp-big svg { width: 38px; height: 38px; }
+
+/* Medidor de volumen: el relleno lo pinta el `background` en línea. */
+.vp-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 110px;
+  height: 4px;
+  margin: 0 6px 0 2px;
+  border-radius: 999px;
+  cursor: pointer;
+  outline: none;
+}
+
+.vp-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fff;
+  border: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+}
+
+.vp-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fff;
+  border: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+}
+
+.vp-range::-moz-range-track { background: transparent; }
+
+/* Opciones del menú del reproductor. */
+.vp-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  font-size: var(--fs-sm, 13px);
+  text-align: left;
+  cursor: pointer;
+}
+
+.vp-item:hover,
+.vp-item:focus-visible {
+  background: rgba(255, 255, 255, .12);
+  outline: none;
+}
+
+/* Línea de reproducción: el área clicable es más alta que la barra visible. */
+.vp-seek {
+  position: relative;
+  height: 18px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+.vp-seek-track {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .25);
+  transition: height .15s ease;
+}
+
+.vp-seek:hover .vp-seek-track,
+.vp-seek:focus-visible .vp-seek-track { height: 6px; }
+
+.vp-seek-thumb {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+  transform: translate(-50%, -50%);
+}
+
+.vp-seek:focus-visible .vp-seek-thumb {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* Subtítulos: encima de la barra de controles, sin bloquear clics. */
+.vp-subs {
+  position: absolute;
+  left: 50%;
+  bottom: 118px;
+  width: min(80%, 760px);
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.vp-subs span {
+  display: inline;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, .72);
+  color: #fff;
+  font-size: var(--fs-p, 18px);
+  line-height: 1.7;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* Input numérico central: sin flechas nativas, mismo lenguaje que la barra. */
+.vp-num {
+  width: 72px;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, .28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .12);
+  color: #fff;
+  font-size: var(--fs-sm, 13px);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+  transition: border-color .2s ease, background .2s ease;
+}
+
+.vp-num::placeholder { color: rgba(255, 255, 255, .55); }
+
+.vp-num::-webkit-outer-spin-button,
+.vp-num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.vp-num:hover { background: rgba(255, 255, 255, .18); }
+
+.vp-num:focus-visible {
+  outline: none;
+  border-color: #fff;
+}
+
+@media (max-width: 560px) {
+  /* En móvil no cabe junto al input central: queda solo el botón de silencio. */
+  .vp-range { display: none; }
+  .vp-num { width: 56px; }
+  .vp-subs { bottom: 104px; width: 92%; }
+  .vp-subs span { font-size: var(--fs-sm, 13px); }
+  .vp-big { transform: scale(.75); }
+}

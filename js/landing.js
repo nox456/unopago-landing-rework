@@ -67,7 +67,7 @@ class Component extends BaseLogic {
   startLoader() {
     const show = this.props.showLoader ?? true;
     if (!show) { this.setState({ loaderDone: true }); return; }
-    const ms = (this.props.loaderSeconds ?? 15) * 1000;
+    const ms = (this.props.loaderSeconds ?? 3) * 1000;
     const t0 = performance.now();
     const tick = now => {
       if (this.state.loaderDone) return;
