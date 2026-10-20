@@ -257,3 +257,34 @@ a:hover {
   .vp-subs span { font-size: var(--fs-sm, 13px); }
   .vp-big { transform: scale(.75); }
 }
+
+/* ==========================================================================
+   Galería bajo el video: las flechas flanquean las imágenes; en móvil bajan
+   debajo para que las 3 imágenes de cada grupo aprovechen todo el ancho.
+   ========================================================================== */
+
+.gal {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 48px 40px 0;
+}
+
+.gal-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.gal-view {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 560px) {
+  .gal { padding: 40px 16px 0; }
+  .gal-view { flex-basis: 100%; order: -1; }
+  .gal-prev { order: 0; }
+}

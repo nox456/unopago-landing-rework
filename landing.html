@@ -126,11 +126,29 @@ const VP_START = 0.35;    /* posición inicial de la línea de reproducción */
 const VP_PREVIEW_W = 160; /* ancho del preview al pasar sobre la línea */
 const VP_SUBTITLE = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.';
 
+/* Galería bajo el video: estática, las flechas avanzan de 3 en 3.
+   Las imágenes se cargan y recortan desde el panel de administración;
+   mientras no haya ninguna se muestran placeholders numerados. */
+const GALLERY_KEY = 'unopago-gallery-v1';
+const GALLERY_PER_PAGE = 3;
+const GALLERY_GAP = 24;   /* px entre imágenes; debe coincidir con el `gap` del track */
+const GALLERY_ICON = I('<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>', 1.6);
+const GALLERY_PLACEHOLDERS = Array.from({ length: 9 }, (_, i) => ({ label: 'Imagen ' + (i + 1), svg: GALLERY_ICON, src: '', isImg: false, isPh: true }));
+
+const readGallery = () => {
+  try {
+    const list = JSON.parse(localStorage.getItem(GALLERY_KEY) || '[]');
+    const imgs = Array.isArray(list) ? list.filter(g => g && g.src) : [];
+    if (!imgs.length) return GALLERY_PLACEHOLDERS;
+    return imgs.map(g => ({ label: g.name || '', svg: null, src: g.src, isImg: true, isPh: false }));
+  } catch (e) { return GALLERY_PLACEHOLDERS; }
+};
+
 const LIGHT = ['#F8FAFC', '#FFFFFF', '#0F172A', '#4B51F6', '#E2E8F0'];
 const DARK = ['#0B0E13', '#161B22', '#F0F6FC', '#38BDF8', '#30363D'];
 
 class Component extends BaseLogic {
-  state = { dark: false, slide: 0, loaderFading: false, loaderDone: false, vStarted: false, vPlaying: false, vVolume: 0.8, vMuted: false, vMenu: false, vMenuView: 'root', vAudio: 'es', vSubs: false, vNumber: String(VP_START * 100), vProgress: VP_START, vHover: null };
+  state = { dark: false, slide: 0, gPage: 0, gallery: GALLERY_PLACEHOLDERS, loaderFading: false, loaderDone: false, vStarted: false, vPlaying: false, vVolume: 0.8, vMuted: false, vMenu: false, vMenuView: 'root', vAudio: 'es', vSubs: false, vNumber: String(VP_START * 100), vProgress: VP_START, vHover: null };
 
   SERVICES = [
     { title: 'Cobranza escolar', body: 'Emite y controla mensualidades, matrículas y cuotas especiales desde un solo panel.', tag: 'Instituciones', svg: I('<path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"></path>') },
@@ -383,7 +401,11 @@ class Component extends BaseLogic {
     this.startLoader();
 
     /* El panel de administración corre en otra pestaña: repintamos al vuelo. */
-    this._onStorage = e => { if (e.key === 'admin-panel-v1') this.applyTheme(this.state.dark); };
+    this.setState({ gallery: readGallery() });
+    this._onStorage = e => {
+      if (e.key === 'admin-panel-v1') this.applyTheme(this.state.dark);
+      if (e.key === GALLERY_KEY) this.setState({ gallery: readGallery() });
+    };
     window.addEventListener('storage', this._onStorage);
 
     this._onResize = () => this.measure();
@@ -442,8 +464,24 @@ class Component extends BaseLogic {
       g.el.scrollTo({ left: card.offsetLeft - g.cards[0].offsetLeft, behavior: 'smooth' });
       this.setState({ slide: p });
     };
+    const gallery = this.state.gallery;
+    const gPages = Math.max(1, Math.ceil(gallery.length / GALLERY_PER_PAGE));
+    const gPage = Math.min(this.state.gPage, gPages - 1);
+    const gGo = i => this.setState({ gPage: ((i % gPages) + gPages) % gPages });
     return {
       ...this.videoVals(),
+      gallery,
+      gPrev: () => gGo(gPage - 1),
+      gNext: () => gGo(gPage + 1),
+      gShift: 'translateX(calc(' + (-gPage) + ' * (100% + ' + GALLERY_GAP + 'px)))',
+      gStatus: 'Imágenes ' + (gPage * GALLERY_PER_PAGE + 1) + ' a ' + Math.min(gallery.length, (gPage + 1) * GALLERY_PER_PAGE) + ' de ' + gallery.length,
+      gDots: Array.from({ length: gPages }, (_, i) => ({
+        go: () => gGo(i),
+        label: 'Ir al grupo ' + (i + 1),
+        current: i === gPage ? 'true' : 'false',
+        width: i === gPage ? '34px' : '14px',
+        bg: i === gPage ? 'var(--c-cta)' : 'var(--c-border)'
+      })),
       services: this.SERVICES,
       cards: this.CARDS,
       prev: () => go(slide - 1),
@@ -640,6 +678,43 @@ if (typeof Component !== 'undefined') {
         </div>
       </sc-if>
     </div>
+  </section>
+
+  <!-- Galería de imágenes: estática, las flechas mueven las imágenes de 3 en 3 -->
+  <section class="gal" aria-roledescription="carrusel" aria-label="Galería de imágenes">
+    <div class="gal-row">
+      <!-- 2. Superficie y 5. Bordes -->
+      <button class="gal-prev" sc-camel-on-click="{{ gPrev }}" aria-label="Imágenes anteriores" style="width:48px;height:48px;flex:none;border-radius:999px;border:1px solid var(--c-border);background:var(--c-surface);color:var(--c-text);font-size:20px;cursor:pointer;transition:border-color .2s" style-hover="border-color:var(--c-cta)">‹</button>
+
+      <div class="gal-view">
+        <div style="display:flex;gap:24px;transform:{{ gShift }};transition:transform .45s cubic-bezier(.4,0,.2,1)">
+          <sc-for list="{{ gallery }}" as="g" hint-placeholder-count="9">
+            <!-- Imagen recortada desde el panel (4:3) -->
+            <sc-if value="{{ g.isImg }}" hint-placeholder-val="{{ false }}">
+              <figure style="flex:0 0 calc((100% - 48px) / 3);box-sizing:border-box;margin:0;aspect-ratio:4/3;border:1px solid var(--c-border);border-radius:16px;overflow:hidden;background:var(--c-surface)">
+                <img src="{{ g.src }}" alt="{{ g.label }}" loading="lazy" style="display:block;width:100%;height:100%;object-fit:cover">
+              </figure>
+            </sc-if>
+            <!-- Placeholder mientras no haya imágenes cargadas -->
+            <sc-if value="{{ g.isPh }}" hint-placeholder-val="{{ true }}">
+              <figure style="flex:0 0 calc((100% - 48px) / 3);box-sizing:border-box;margin:0;aspect-ratio:4/3;background:var(--c-surface);border:1px dashed var(--c-border);border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--c-text)">
+                <div style="opacity:.45" ref="{{ g.svg }}"></div>
+                <figcaption style="font-size:var(--fs-sm, 13px);font-weight:500;letter-spacing:.06em;opacity:.6">{{ g.label }}</figcaption>
+              </figure>
+            </sc-if>
+          </sc-for>
+        </div>
+      </div>
+
+      <button sc-camel-on-click="{{ gNext }}" aria-label="Imágenes siguientes" style="width:48px;height:48px;flex:none;border-radius:999px;border:1px solid var(--c-border);background:var(--c-surface);color:var(--c-text);font-size:20px;cursor:pointer;transition:border-color .2s" style-hover="border-color:var(--c-cta)">›</button>
+    </div>
+
+    <div style="display:flex;justify-content:center;gap:8px;margin-top:22px">
+      <sc-for list="{{ gDots }}" as="d" hint-placeholder-count="3">
+        <button sc-camel-on-click="{{ d.go }}" aria-label="{{ d.label }}" aria-current="{{ d.current }}" style="width:{{ d.width }};height:6px;border-radius:999px;border:0;padding:0;cursor:pointer;background:{{ d.bg }};transition:width .3s,background .3s"></button>
+      </sc-for>
+    </div>
+    <p aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">{{ gStatus }}</p>
   </section>
 
   <!-- 4. Botón Flotante Fijo de Ayuda (CTA - 10%) -->
