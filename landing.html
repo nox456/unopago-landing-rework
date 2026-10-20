@@ -122,8 +122,12 @@ const VP_AUDIO = [
   { id: 'en', label: 'Inglés' },
   { id: 'es', label: 'Español' }
 ];
-const VP_START = 0.35;    /* posición inicial de la línea de reproducción */
+const VP_START = 0;       /* posición inicial de la línea de reproducción */
 const VP_PREVIEW_W = 160; /* ancho del preview al pasar sobre la línea */
+/* Previews de la línea de reproducción: 15 cuadros del video en una sola
+   tira (media/cobrar-cliente-previews.jpg), cada uno tomado en el centro de
+   su tramo; el puntero elige el cuadro según su posición. */
+const VP_PREVIEW_FRAMES = 15;
 const VP_SUBTITLE = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.';
 
 /* Galería bajo el video: estática, las flechas avanzan de 3 en 3.
@@ -209,8 +213,6 @@ class Component extends BaseLogic {
     if (el) { el.volume = this.state.vVolume; el.muted = this.state.vMuted; }
   };
 
-  /* Todavía no hay fuente: los controles funcionan solo con el estado y
-     se conectan al <video> real en cuanto tenga un `src`. */
   setPlaying(play) {
     const v = this._video;
     if (v && v.currentSrc) {
@@ -283,6 +285,9 @@ class Component extends BaseLogic {
       vHovering: !!vHover,
       vHoverPct: vHover ? (vHover.ratio * 100).toFixed(2) + '%' : '0%',
       vPreviewLeft: vHover ? vHover.left + 'px' : '0px',
+      vPreviewPos: vHover
+        ? (Math.min(VP_PREVIEW_FRAMES - 1, Math.floor(vHover.ratio * VP_PREVIEW_FRAMES)) / (VP_PREVIEW_FRAMES - 1) * 100).toFixed(4) + '% 0'
+        : '0 0',
       vSeekMove: e => {
         const { ratio, x, width } = this.seekRatio(e);
         /* El preview se mantiene dentro de la línea, sin salirse por los bordes. */
@@ -607,7 +612,7 @@ if (typeof Component !== 'undefined') {
   <!-- Video de presentación: controles propios, el <video> no usa los nativos -->
   <section style="max-width:1360px;margin:0 auto;padding:88px 40px 0">
     <div class="vp" style="position:relative;aspect-ratio:16/9;background:var(--c-surface);border:1px solid var(--c-border);border-radius:16px;overflow:hidden;box-shadow:0 18px 44px rgba(0,0,0,.10)">
-      <video ref="{{ videoRef }}" sc-camel-on-ended="{{ vOnEnded }}" sc-camel-on-time-update="{{ vOnTime }}" playsinline preload="metadata" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:#000"></video>
+      <video ref="{{ videoRef }}" src="media/cobrar-cliente.mp4" poster="media/cobrar-cliente-poster.jpg" sc-camel-on-ended="{{ vOnEnded }}" sc-camel-on-time-update="{{ vOnTime }}" playsinline preload="metadata" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:#000"></video>
 
       <!-- Subtítulos (texto de ejemplo hasta que haya pista real) -->
       <sc-if value="{{ vShowSubs }}" hint-placeholder-val="{{ false }}">
@@ -621,8 +626,7 @@ if (typeof Component !== 'undefined') {
 
       <!-- Miniatura con botón central de play -->
       <sc-if value="{{ vShowThumb }}" hint-placeholder-val="{{ true }}">
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--c-surface),var(--c-bg))">
-          <span style="position:absolute;left:24px;top:24px;font-size:var(--fs-sm, 13px);font-weight:500;letter-spacing:.06em;color:var(--c-text);background:var(--c-bg);border:1px solid var(--c-border);padding:10px 16px;border-radius:8px">miniatura del video</span>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:url(media/cobrar-cliente-poster.jpg) center/cover no-repeat">
           <button class="vp-big" sc-camel-on-click="{{ vStart }}" aria-label="Reproducir video" style="width:96px;height:96px;border-radius:999px;border:0;background:var(--c-cta);color:var(--c-surface);display:flex;align-items:center;justify-content:center;padding:0 0 0 6px;cursor:pointer;box-shadow:0 14px 36px rgba(0,0,0,.28);transition:transform .2s ease" style-hover="transform:scale(1.07)" ref="{{ vPlayIcon }}"></button>
         </div>
       </sc-if>
@@ -633,7 +637,7 @@ if (typeof Component !== 'undefined') {
           <!-- Línea de reproducción con preview al pasar el puntero -->
           <div class="vp-seek" role="slider" tabindex="0" aria-label="Línea de reproducción" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ vProgNow }}" aria-valuetext="{{ vProgPct }}" sc-camel-on-pointer-down="{{ vSeekDown }}" sc-camel-on-pointer-move="{{ vSeekMove }}" sc-camel-on-pointer-leave="{{ vSeekLeave }}" sc-camel-on-key-down="{{ vSeekKey }}">
             <sc-if value="{{ vHovering }}" hint-placeholder-val="{{ false }}">
-              <div aria-hidden="true" style="position:absolute;bottom:calc(100% + 12px);left:{{ vPreviewLeft }};width:160px;aspect-ratio:16/9;border-radius:8px;background:var(--c-cta);border:2px solid #fff;box-shadow:0 8px 24px rgba(0,0,0,.45);pointer-events:none"></div>
+              <div aria-hidden="true" style="position:absolute;bottom:calc(100% + 12px);left:{{ vPreviewLeft }};width:160px;aspect-ratio:16/9;border-radius:8px;background:#000 url(media/cobrar-cliente-previews.jpg) no-repeat;background-size:1500% 100%;background-position:{{ vPreviewPos }};border:2px solid #fff;box-shadow:0 8px 24px rgba(0,0,0,.45);pointer-events:none"></div>
             </sc-if>
             <div class="vp-seek-track">
               <sc-if value="{{ vHovering }}" hint-placeholder-val="{{ false }}">
