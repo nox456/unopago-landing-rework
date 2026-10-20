@@ -97,6 +97,13 @@ a:hover {
 
 .vp-big svg { width: 38px; height: 38px; }
 
+/* Pantalla completa: el contenedor ocupa toda la pantalla y el video se ve
+   entero (sin recortes) aunque la pantalla no sea 16:9. */
+.vp:fullscreen { border: 0 !important; border-radius: 0 !important; background: #000 !important; }
+.vp:-webkit-full-screen { border: 0 !important; border-radius: 0 !important; background: #000 !important; }
+.vp:fullscreen video { object-fit: contain !important; }
+.vp:-webkit-full-screen video { object-fit: contain !important; }
+
 /* Medidor de volumen: el relleno lo pinta el `background` en línea. */
 .vp-range {
   -webkit-appearance: none;

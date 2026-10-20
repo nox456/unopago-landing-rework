@@ -115,7 +115,9 @@ const VP_ICON = {
   volHigh: I('<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>'),
   volLow: I('<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>'),
   volMute: I('<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line>'),
-  gear: I('<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>')
+  gear: I('<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>'),
+  fsEnter: I('<path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>'),
+  fsExit: I('<path d="M8 3v3a2 2 0 0 1-2 2H3"></path><path d="M21 8h-3a2 2 0 0 1-2-2V3"></path><path d="M3 16h3a2 2 0 0 1 2 2v3"></path><path d="M16 21v-3a2 2 0 0 1 2-2h3"></path>')
 };
 
 /* Pistas de audio del menú de opciones. Los navegadores no permiten elegir
@@ -175,7 +177,7 @@ const LIGHT = ['#F8FAFC', '#FFFFFF', '#0F172A', '#4B51F6', '#E2E8F0'];
 const DARK = ['#0B0E13', '#161B22', '#F0F6FC', '#38BDF8', '#30363D'];
 
 class Component extends BaseLogic {
-  state = { dark: false, slide: 0, gPage: 0, gallery: GALLERY_PLACEHOLDERS, loaderFading: false, loaderDone: false, vStarted: false, vPlaying: false, vVolume: 0.8, vMuted: false, vMenu: false, vMenuView: 'root', vAudio: VP_AUDIO_DEFAULT, vSubs: 'off', vCue: '', vNumber: '0', vProgress: VP_START, vDuration: 0, vHover: null };
+  state = { dark: false, slide: 0, gPage: 0, gallery: GALLERY_PLACEHOLDERS, loaderFading: false, loaderDone: false, vStarted: false, vPlaying: false, vVolume: 0.8, vMuted: false, vMenu: false, vMenuView: 'root', vAudio: VP_AUDIO_DEFAULT, vSubs: 'off', vCue: '', vNumber: '0', vProgress: VP_START, vDuration: 0, vFull: false, vHover: null };
 
   SERVICES = [
     { title: 'Cobranza escolar', body: 'Emite y controla mensualidades, matrículas y cuotas especiales desde un solo panel.', tag: 'Instituciones', svg: I('<path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"></path>') },
@@ -288,6 +290,24 @@ class Component extends BaseLogic {
     this.setState({ vStarted: true, vPlaying: play, vMenu: false });
   }
 
+  /* Pantalla completa sobre el contenedor `.vp` (no el <video>) para conservar
+     los controles propios. iPhone no la permite en elementos: ahí se usa la
+     pantalla completa nativa del video. */
+  toggleFullscreen() {
+    const v = this._video, box = v && v.parentElement;
+    if (!box) return;
+    const current = document.fullscreenElement || document.webkitFullscreenElement;
+    if (current) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else if (box.requestFullscreen || box.webkitRequestFullscreen) {
+      const p = (box.requestFullscreen || box.webkitRequestFullscreen).call(box);
+      if (p && p.catch) p.catch(() => {});
+    } else if (v.webkitEnterFullscreen) {
+      v.webkitEnterFullscreen();
+    }
+    this.setState({ vMenu: false });
+  }
+
   setVolume(volume, muted) {
     const v = this._video;
     if (v) { v.volume = volume; v.muted = muted; }
@@ -333,6 +353,9 @@ class Component extends BaseLogic {
       vVolIcon: silent ? VP_ICON.volMute : vVolume < 0.5 ? VP_ICON.volLow : VP_ICON.volHigh,
       vMuteLabel: silent ? 'Activar sonido' : 'Silenciar',
       vGearIcon: VP_ICON.gear,
+      vFullIcon: this.state.vFull ? VP_ICON.fsExit : VP_ICON.fsEnter,
+      vFullLabel: this.state.vFull ? 'Salir de pantalla completa' : 'Pantalla completa',
+      vToggleFull: () => this.toggleFullscreen(),
       vVolPct: pct,
       vVolFill: 'linear-gradient(to right,var(--c-cta) ' + pct + '%,rgba(255,255,255,.35) ' + pct + '%)',
       vMenuRoot: vMenuView === 'root',
@@ -508,6 +531,14 @@ class Component extends BaseLogic {
     };
     window.addEventListener('storage', this._onStorage);
 
+    /* Mantiene el ícono al día también al salir con Esc. */
+    this._onFullscreen = () => {
+      const el = document.fullscreenElement || document.webkitFullscreenElement;
+      this.setState({ vFull: !!el && !!this._video && el === this._video.parentElement });
+    };
+    document.addEventListener('fullscreenchange', this._onFullscreen);
+    document.addEventListener('webkitfullscreenchange', this._onFullscreen);
+
     this._onResize = () => this.measure();
     window.addEventListener('resize', this._onResize);
 
@@ -530,6 +561,8 @@ class Component extends BaseLogic {
     clearTimeout(this._tgT2);
     window.removeEventListener('resize', this._onResize);
     window.removeEventListener('storage', this._onStorage);
+    document.removeEventListener('fullscreenchange', this._onFullscreen);
+    document.removeEventListener('webkitfullscreenchange', this._onFullscreen);
     const el = this.trackEl();
     if (el && this._onTrackScroll) el.removeEventListener('scroll', this._onTrackScroll);
   }
@@ -750,7 +783,8 @@ if (typeof Component !== 'undefined') {
           </div>
           <!-- Input numérico central: posición de reproducción en segundos -->
           <input class="vp-num" type="number" inputmode="numeric" min="0" max="{{ vNumMax }}" step="1" value="{{ vNumber }}" sc-camel-on-change="{{ vOnNumber }}" aria-label="Posición de reproducción en segundos" title="Posición de reproducción en segundos" placeholder="0">
-          <div style="position:relative;justify-self:end">
+          <div style="display:flex;align-items:center;gap:6px;justify-self:end">
+          <div style="position:relative">
             <button class="vp-btn" sc-camel-on-click="{{ vToggleMenu }}" aria-label="Opciones" title="Opciones" aria-haspopup="menu" aria-expanded="{{ vMenuExpanded }}" ref="{{ vGearIcon }}"></button>
             <sc-if value="{{ vMenuOpen }}" hint-placeholder-val="{{ false }}">
               <div role="menu" style="position:absolute;right:0;bottom:calc(100% + 10px);min-width:220px;padding:6px;border-radius:12px;background:rgba(17,20,28,.94);box-shadow:0 12px 32px rgba(0,0,0,.35)">
@@ -780,6 +814,8 @@ if (typeof Component !== 'undefined') {
                 </sc-if>
               </div>
             </sc-if>
+          </div>
+            <button class="vp-btn" sc-camel-on-click="{{ vToggleFull }}" aria-label="{{ vFullLabel }}" title="{{ vFullLabel }}" ref="{{ vFullIcon }}"></button>
           </div>
           </div>
         </div>
