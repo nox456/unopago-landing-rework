@@ -23,6 +23,7 @@
 
   <!-- Lógica de la Landing -->
   <script src="js/landing.js"></script>
+  <script src="media/cobrar-cliente.subs.js"></script>
 
   <!-- Script de configuración interpretado por DC-Runtime -->
   <script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"tsType":"boolean","section":"Tema"},"showLoader":{"editor":"boolean","default":true,"tsType":"boolean","section":"Pantalla de carga"},"loaderSeconds":{"editor":"range","default":3,"min":1,"max":20,"step":1,"unit":"s","tsType":"number","section":"Pantalla de carga"}}'>
@@ -117,18 +118,40 @@ const VP_ICON = {
   gear: I('<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>')
 };
 
-/* Pistas de audio del menú de opciones. */
+/* Pistas de audio del menú de opciones. Los navegadores no permiten elegir
+   pistas de audio dentro de un MP4 (`audioTracks` solo existe en Safari), así
+   que cada idioma es un archivo de video propio y al cambiar se intercambia la
+   fuente conservando la posición y el estado de reproducción. */
 const VP_AUDIO = [
-  { id: 'en', label: 'Inglés' },
-  { id: 'es', label: 'Español' }
+  { id: 'en', label: 'Inglés', src: 'media/cobrar-cliente-en.mp4' },
+  { id: 'es', label: 'Español', src: 'media/cobrar-cliente.mp4' }
 ];
+const VP_AUDIO_DEFAULT = 'es';
+
+/* Idiomas de subtítulos; los textos vienen de media/cobrar-cliente.subs.js. */
+const VP_SUBS = [
+  { id: 'off', label: 'Desactivados' },
+  { id: 'es', label: 'Español' },
+  { id: 'en', label: 'Inglés' }
+];
+
+/* Convierte un texto WebVTT en cues [inicio, fin, texto]. */
+const parseVtt = vtt => {
+  const sec = t => t.split(':').reduce((acc, n) => acc * 60 + parseFloat(n), 0);
+  return String(vtt || '').replace(/\r/g, '').split(/\n{2,}/).map(block => {
+    const lines = block.split('\n');
+    const at = lines.findIndex(l => l.includes('-->'));
+    if (at < 0) return null;
+    const [a, b] = lines[at].split('-->').map(s => s.trim().split(/\s+/)[0]);
+    return [sec(a), sec(b), lines.slice(at + 1).join('\n').trim()];
+  }).filter(c => c && c[2]);
+};
 const VP_START = 0;       /* posición inicial de la línea de reproducción */
 const VP_PREVIEW_W = 160; /* ancho del preview al pasar sobre la línea */
 /* Previews de la línea de reproducción: 15 cuadros del video en una sola
    tira (media/cobrar-cliente-previews.jpg), cada uno tomado en el centro de
    su tramo; el puntero elige el cuadro según su posición. */
 const VP_PREVIEW_FRAMES = 15;
-const VP_SUBTITLE = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.';
 
 /* Galería bajo el video: estática, las flechas avanzan de 3 en 3.
    Las imágenes se cargan y recortan desde el panel de administración;
@@ -152,7 +175,7 @@ const LIGHT = ['#F8FAFC', '#FFFFFF', '#0F172A', '#4B51F6', '#E2E8F0'];
 const DARK = ['#0B0E13', '#161B22', '#F0F6FC', '#38BDF8', '#30363D'];
 
 class Component extends BaseLogic {
-  state = { dark: false, slide: 0, gPage: 0, gallery: GALLERY_PLACEHOLDERS, loaderFading: false, loaderDone: false, vStarted: false, vPlaying: false, vVolume: 0.8, vMuted: false, vMenu: false, vMenuView: 'root', vAudio: 'es', vSubs: false, vNumber: String(VP_START * 100), vProgress: VP_START, vHover: null };
+  state = { dark: false, slide: 0, gPage: 0, gallery: GALLERY_PLACEHOLDERS, loaderFading: false, loaderDone: false, vStarted: false, vPlaying: false, vVolume: 0.8, vMuted: false, vMenu: false, vMenuView: 'root', vAudio: VP_AUDIO_DEFAULT, vSubs: 'off', vCue: '', vNumber: String(VP_START * 100), vProgress: VP_START, vHover: null };
 
   SERVICES = [
     { title: 'Cobranza escolar', body: 'Emite y controla mensualidades, matrículas y cuotas especiales desde un solo panel.', tag: 'Instituciones', svg: I('<path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"></path>') },
@@ -210,8 +233,51 @@ class Component extends BaseLogic {
 
   videoRef = el => {
     this._video = el;
-    if (el) { el.volume = this.state.vVolume; el.muted = this.state.vMuted; }
+    if (!el) return;
+    el.volume = this.state.vVolume;
+    el.muted = this.state.vMuted;
+    if (!el._vpTracks) this.buildTracks(el);
   };
+
+  /* Crea una pista de texto por idioma con `addTextTrack` (funciona también en
+     file://). Quedan en modo `hidden`: el navegador sigue el tiempo y avisa con
+     `cuechange`, pero el texto lo pintamos nosotros con el estilo de la landing. */
+  buildTracks(v) {
+    const subs = window.VP_SUBTITLES || {};
+    v._vpTracks = {};
+    VP_SUBS.forEach(s => {
+      if (s.id === 'off' || !subs[s.id]) return;
+      const track = v.addTextTrack('subtitles', s.label, s.id);
+      parseVtt(subs[s.id]).forEach(([a, b, text]) => track.addCue(new VTTCue(a, b, text)));
+      track.mode = 'disabled';
+      track.addEventListener('cuechange', () => {
+        if (this.state.vSubs !== s.id) return;
+        const cues = Array.from(track.activeCues || []);
+        this.setState({ vCue: cues.map(c => c.text.replace(/<[^>]+>/g, '')).join('\n') });
+      });
+      v._vpTracks[s.id] = track;
+    });
+    this.applySubs(this.state.vSubs);
+  }
+
+  applySubs(id) {
+    const v = this._video;
+    if (!v || !v._vpTracks) return;
+    Object.keys(v._vpTracks).forEach(k => { v._vpTracks[k].mode = k === id ? 'hidden' : 'disabled'; });
+    const track = v._vpTracks[id];
+    const cues = track ? Array.from(track.activeCues || []) : [];
+    this.setState({ vSubs: id, vCue: cues.map(c => c.text.replace(/<[^>]+>/g, '')).join('\n'), vMenu: false, vMenuView: 'root' });
+  }
+
+  /* Cambia el idioma del audio intercambiando la fuente del video. La posición
+     y el play/pausa se restauran en `loadedmetadata` del nuevo archivo. */
+  setAudio(id) {
+    const v = this._video;
+    if (id !== this.state.vAudio && v) {
+      this._vpResume = { time: v.currentTime, play: this.state.vPlaying, from: this.state.vAudio };
+    }
+    this.setState({ vAudio: id, vMenu: false, vMenuView: 'root' });
+  }
 
   setPlaying(play) {
     const v = this._video;
@@ -247,7 +313,7 @@ class Component extends BaseLogic {
   }
 
   videoVals() {
-    const { vStarted, vPlaying, vVolume, vMuted, vMenu, vMenuView, vAudio, vProgress, vHover } = this.state;
+    const { vStarted, vPlaying, vVolume, vMuted, vMenu, vMenuView, vAudio, vSubs, vCue, vProgress, vHover } = this.state;
     const progPct = (vProgress * 100).toFixed(2) + '%';
     const silent = vMuted || vVolume === 0;
     const pct = silent ? 0 : Math.round(vVolume * 100);
@@ -271,15 +337,36 @@ class Component extends BaseLogic {
         label: a.label,
         checked: a.id === vAudio ? 'true' : 'false',
         mark: a.id === vAudio ? '✓' : '',
-        pick: () => this.setState({ vAudio: a.id, vMenuView: 'root' })
+        pick: () => this.setAudio(a.id)
       })),
+      vSrc: VP_AUDIO.find(a => a.id === vAudio).src,
+      vOnMeta: e => {
+        const v = e.currentTarget, r = this._vpResume;
+        if (!r) return;
+        this._vpResume = null;
+        v.currentTime = Math.min(r.time, v.duration || r.time);
+        if (r.play) v.play().catch(() => this.setState({ vPlaying: false }));
+      },
+      /* Si el archivo del idioma no carga, volvemos al anterior sin perder la posición. */
+      vOnError: () => {
+        const r = this._vpResume;
+        if (!r || r.from === this.state.vAudio) return;
+        console.warn('[video] No se pudo cargar el audio "' + this.state.vAudio + '": ' + VP_AUDIO.find(a => a.id === this.state.vAudio).src);
+        this.setState({ vAudio: r.from });
+      },
       vOpenAudio: () => this.setState({ vMenuView: 'audio' }),
+      vOpenSubs: () => this.setState({ vMenuView: 'subs' }),
       vMenuBack: () => this.setState({ vMenuView: 'root' }),
-      vSubsLabel: this.state.vSubs ? 'Activados' : 'Desactivados',
-      vSubsChecked: this.state.vSubs ? 'true' : 'false',
-      vShowSubs: vStarted && this.state.vSubs,
-      vSubtitle: VP_SUBTITLE,
-      vToggleSubs: () => this.setState(s => ({ vSubs: !s.vSubs, vMenu: false })),
+      vMenuSubs: vMenuView === 'subs',
+      vSubsLabel: VP_SUBS.find(s => s.id === vSubs).label,
+      vSubsOptions: VP_SUBS.map(s => ({
+        label: s.label,
+        checked: s.id === vSubs ? 'true' : 'false',
+        mark: s.id === vSubs ? '✓' : '',
+        pick: () => this.applySubs(s.id)
+      })),
+      vShowSubs: vStarted && vSubs !== 'off' && !!vCue,
+      vSubtitle: vCue,
       vProgPct: progPct,
       vProgNow: Math.round(vProgress * 100),
       vHovering: !!vHover,
@@ -612,9 +699,9 @@ if (typeof Component !== 'undefined') {
   <!-- Video de presentación: controles propios, el <video> no usa los nativos -->
   <section style="max-width:1360px;margin:0 auto;padding:88px 40px 0">
     <div class="vp" style="position:relative;aspect-ratio:16/9;background:var(--c-surface);border:1px solid var(--c-border);border-radius:16px;overflow:hidden;box-shadow:0 18px 44px rgba(0,0,0,.10)">
-      <video ref="{{ videoRef }}" src="media/cobrar-cliente.mp4" poster="media/cobrar-cliente-poster.jpg" sc-camel-on-ended="{{ vOnEnded }}" sc-camel-on-time-update="{{ vOnTime }}" playsinline preload="metadata" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:#000"></video>
+      <video ref="{{ videoRef }}" src="{{ vSrc }}" poster="media/cobrar-cliente-poster.jpg" sc-camel-on-ended="{{ vOnEnded }}" sc-camel-on-time-update="{{ vOnTime }}" sc-camel-on-loaded-metadata="{{ vOnMeta }}" sc-camel-on-error="{{ vOnError }}" playsinline preload="metadata" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:#000"></video>
 
-      <!-- Subtítulos (texto de ejemplo hasta que haya pista real) -->
+      <!-- Subtítulos: cue activo de la pista elegida (media/cobrar-cliente.subs.js) -->
       <sc-if value="{{ vShowSubs }}" hint-placeholder-val="{{ false }}">
         <div class="vp-subs" aria-live="polite"><span>{{ vSubtitle }}</span></div>
       </sc-if>
@@ -663,8 +750,8 @@ if (typeof Component !== 'undefined') {
                   <button class="vp-item" role="menuitem" aria-haspopup="menu" sc-camel-on-click="{{ vOpenAudio }}">
                     <span>Pista de audio</span><span style="opacity:.65">{{ vAudioLabel }} ›</span>
                   </button>
-                  <button class="vp-item" role="menuitemcheckbox" aria-checked="{{ vSubsChecked }}" sc-camel-on-click="{{ vToggleSubs }}">
-                    <span>Subtítulos</span><span style="opacity:.65">{{ vSubsLabel }}</span>
+                  <button class="vp-item" role="menuitem" aria-haspopup="menu" sc-camel-on-click="{{ vOpenSubs }}">
+                    <span>Subtítulos</span><span style="opacity:.65">{{ vSubsLabel }} ›</span>
                   </button>
                 </sc-if>
                 <sc-if value="{{ vMenuAudio }}" hint-placeholder-val="{{ false }}">
@@ -672,6 +759,14 @@ if (typeof Component !== 'undefined') {
                   <sc-for list="{{ vAudioOptions }}" as="a" hint-placeholder-count="2">
                     <button class="vp-item" role="menuitemradio" aria-checked="{{ a.checked }}" sc-camel-on-click="{{ a.pick }}">
                       <span>{{ a.label }}</span><span style="color:var(--c-cta);font-weight:700">{{ a.mark }}</span>
+                    </button>
+                  </sc-for>
+                </sc-if>
+                <sc-if value="{{ vMenuSubs }}" hint-placeholder-val="{{ false }}">
+                  <button class="vp-item" role="menuitem" sc-camel-on-click="{{ vMenuBack }}" style="justify-content:flex-start;font-weight:600;border-bottom:1px solid rgba(255,255,255,.12);border-radius:8px 8px 0 0;margin-bottom:4px">‹ Subtítulos</button>
+                  <sc-for list="{{ vSubsOptions }}" as="s" hint-placeholder-count="3">
+                    <button class="vp-item" role="menuitemradio" aria-checked="{{ s.checked }}" sc-camel-on-click="{{ s.pick }}">
+                      <span>{{ s.label }}</span><span style="color:var(--c-cta);font-weight:700">{{ s.mark }}</span>
                     </button>
                   </sc-for>
                 </sc-if>
