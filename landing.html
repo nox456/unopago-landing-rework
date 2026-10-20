@@ -175,7 +175,7 @@ const LIGHT = ['#F8FAFC', '#FFFFFF', '#0F172A', '#4B51F6', '#E2E8F0'];
 const DARK = ['#0B0E13', '#161B22', '#F0F6FC', '#38BDF8', '#30363D'];
 
 class Component extends BaseLogic {
-  state = { dark: false, slide: 0, gPage: 0, gallery: GALLERY_PLACEHOLDERS, loaderFading: false, loaderDone: false, vStarted: false, vPlaying: false, vVolume: 0.8, vMuted: false, vMenu: false, vMenuView: 'root', vAudio: VP_AUDIO_DEFAULT, vSubs: 'off', vCue: '', vNumber: String(VP_START * 100), vProgress: VP_START, vHover: null };
+  state = { dark: false, slide: 0, gPage: 0, gallery: GALLERY_PLACEHOLDERS, loaderFading: false, loaderDone: false, vStarted: false, vPlaying: false, vVolume: 0.8, vMuted: false, vMenu: false, vMenuView: 'root', vAudio: VP_AUDIO_DEFAULT, vSubs: 'off', vCue: '', vNumber: '0', vProgress: VP_START, vDuration: 0, vHover: null };
 
   SERVICES = [
     { title: 'Cobranza escolar', body: 'Emite y controla mensualidades, matrículas y cuotas especiales desde un solo panel.', tag: 'Instituciones', svg: I('<path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"></path>') },
@@ -300,16 +300,21 @@ class Component extends BaseLogic {
     return { ratio: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), x: e.clientX - r.left, width: r.width };
   }
 
-  /* Mueve la línea de reproducción y mantiene el input numérico (0-100) al día.
+  /* Segundo entero (0..duración) que corresponde a una posición 0..1. */
+  secondsAt(ratio) {
+    return String(Math.floor(ratio * this.state.vDuration));
+  }
+
+  /* Mueve la línea de reproducción y mantiene el input numérico (en segundos) al día.
      `text` permite conservar lo que el usuario está escribiendo en el input. */
   seek(ratio, text) {
     const v = this._video;
     if (v && v.duration) v.currentTime = ratio * v.duration;
-    this.setState({ vProgress: ratio, vNumber: text ?? String(Math.round(ratio * 100)) });
+    this.setState({ vProgress: ratio, vNumber: text ?? this.secondsAt(ratio) });
   }
 
   seekFromVideo(ratio) {
-    this.setState({ vProgress: ratio, vNumber: String(Math.round(ratio * 100)) });
+    this.setState({ vProgress: ratio, vNumber: this.secondsAt(ratio) });
   }
 
   videoVals() {
@@ -342,6 +347,8 @@ class Component extends BaseLogic {
       vSrc: VP_AUDIO.find(a => a.id === vAudio).src,
       vOnMeta: e => {
         const v = e.currentTarget, r = this._vpResume;
+        /* Con la duración conocida, el input pasa a trabajar en segundos. */
+        if (v.duration) this.setState({ vDuration: v.duration, vNumber: String(Math.floor(v.currentTime)) });
         if (!r) return;
         this._vpResume = null;
         v.currentTime = Math.min(r.time, v.duration || r.time);
@@ -416,11 +423,12 @@ class Component extends BaseLogic {
       vToggleMenu: () => this.setState(s => ({ vMenu: !s.vMenu, vMenuView: 'root' })),
       /* Se guarda como texto para permitir el campo vacío mientras se escribe. */
       vNumber: this.state.vNumber,
+      vNumMax: Math.floor(this.state.vDuration),
       vOnNumber: e => {
-        const raw = e.target.value;
-        if (raw === '' || isNaN(Number(raw))) { this.setState({ vNumber: raw }); return; }
-        const n = Math.max(0, Math.min(100, Number(raw)));
-        this.seek(n / 100, n === Number(raw) ? raw : String(n));
+        const raw = e.target.value, dur = this.state.vDuration;
+        if (raw === '' || isNaN(Number(raw)) || !dur) { this.setState({ vNumber: raw }); return; }
+        const n = Math.max(0, Math.min(Math.floor(dur), Number(raw)));
+        this.seek(n / dur, n === Number(raw) ? raw : String(n));
       }
     };
   }
@@ -740,8 +748,8 @@ if (typeof Component !== 'undefined') {
             <button class="vp-btn" sc-camel-on-click="{{ vToggleMute }}" aria-label="{{ vMuteLabel }}" title="{{ vMuteLabel }}" ref="{{ vVolIcon }}"></button>
             <input class="vp-range" type="range" min="0" max="100" step="1" value="{{ vVolPct }}" sc-camel-on-change="{{ vOnVolume }}" aria-label="Volumen" style="background:{{ vVolFill }}">
           </div>
-          <!-- Input numérico central (por ahora sin uso) -->
-          <input class="vp-num" type="number" inputmode="numeric" min="0" max="100" step="1" value="{{ vNumber }}" sc-camel-on-change="{{ vOnNumber }}" aria-label="Posición de reproducción (0 a 100)" title="Posición de reproducción (0 a 100)" placeholder="0">
+          <!-- Input numérico central: posición de reproducción en segundos -->
+          <input class="vp-num" type="number" inputmode="numeric" min="0" max="{{ vNumMax }}" step="1" value="{{ vNumber }}" sc-camel-on-change="{{ vOnNumber }}" aria-label="Posición de reproducción en segundos" title="Posición de reproducción en segundos" placeholder="0">
           <div style="position:relative;justify-self:end">
             <button class="vp-btn" sc-camel-on-click="{{ vToggleMenu }}" aria-label="Opciones" title="Opciones" aria-haspopup="menu" aria-expanded="{{ vMenuExpanded }}" ref="{{ vGearIcon }}"></button>
             <sc-if value="{{ vMenuOpen }}" hint-placeholder-val="{{ false }}">
