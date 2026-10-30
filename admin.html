@@ -25,6 +25,9 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css" integrity="sha512-UtLOu9C7NuThQhuXXrGwx9Jb/z9zPQJctuAgNUBK3Z6kkSYT9wJ+2+dh6klS+TDBCV9kNPBbAxbVD+vCcfGPaA==" crossorigin="anonymous" referrerpolicy="no-referrer">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js" integrity="sha512-JyCZjCOZoyeQZSd5+YEAcFgz2fowJ1F1hyJOXgtKu4llIa0KneLcidn5bwfutiehUTiOuK87A986BZJMko0eWQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
+  <!-- Almacén del video y las pistas de audio de la landing (IndexedDB) -->
+  <script src="js/media-store.js"></script>
+
   <!-- Lógica de la Aplicación y Tangram Loader -->
   <script src="js/tangram-loader.js"></script>
   <script src="js/app.js"></script>
@@ -119,6 +122,16 @@ const GALLERY_H = 900;
 const GALLERY_QUALITY = 0.85;      /* calidad JPEG del recorte */
 const GALLERY_MAX_MB = 10;         /* tamaño máximo del archivo original */
 const GALLERY_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+/* Video de la landing: un MP4 sin audio + una pista de audio por idioma + subtítulos .vtt.
+   Se guardan como Blob en IndexedDB (js/media-store.js), no en localStorage. */
+const VIDEO_MAX_MB = 200;
+const AUDIO_MAX_MB = 50;
+const AUDIO_EXT = /\.(mp3|m4a|aac|ogg|oga|opus|wav|webm)$/i;
+const SUBS_MAX_KB = 512;           /* tamaño máximo de un .vtt */
+const AUDIO_DRIFT_WARN = 1;        /* s de diferencia con el video antes de avisar */
+const PREVIEW_FRAMES = 15;         /* cuadros de la tira de previews (igual que la landing) */
+const PREVIEW_W = 320;             /* tamaño de cada cuadro de la tira */
+const PREVIEW_H = 180;
 
 const SERVICES = [
   { title: 'Cobranza escolar', body: 'Emite y controla mensualidades, matrículas y cuotas especiales.', tag: 'Instituciones' },
@@ -181,7 +194,21 @@ class Component extends BaseLogic {
     gallery: [],
     galCrop: null,   // { src, name } mientras se recorta una imagen
     galMsg: '',
-    galError: false
+    galError: false,
+    vid: null,        // { name, duration, sizeMb, url } del video subido; null = demostración
+    vidDuration: 0,   // duración del video vigente (subido o de demostración)
+    vidBusy: false,
+    vidMsg: '',
+    vidError: false,
+    trkList: [],      // [{ id, label, name, duration, url }] en el orden del menú
+    trkDefault: null,
+    trkLabel: '',
+    trkMsg: '',
+    trkError: false,
+    subList: [],      // [{ id, label, name, cues, end }] en el orden del menú
+    subLabel: '',
+    subMsg: '',
+    subError: false
   };
 
 
@@ -199,6 +226,7 @@ class Component extends BaseLogic {
       }
 
       this.setState({ gallery: this.readGallery() });
+      this.loadMedia();
 
       const raw = localStorage.getItem('admin-panel-v1');
       if (raw) {
@@ -459,6 +487,273 @@ class Component extends BaseLogic {
     });
   }
 
+  /* ---- Video y pistas de audio de la landing (IndexedDB) ---- */
+
+  /* Lee lo guardado y crea URLs locales para las vistas previas del panel. */
+  loadMedia() {
+    if (!window.UnoMedia) {
+      this.setState({ vidMsg: 'No se pudo cargar js/media-store.js.', vidError: true });
+      return;
+    }
+    Promise.all([UnoMedia.getVideo(), UnoMedia.getTracks(), UnoMedia.getSubs()]).then(([video, tracks, subs]) => {
+      (this._mediaUrls || []).forEach(u => URL.revokeObjectURL(u));
+      this._mediaUrls = [];
+      const url = blob => { const u = URL.createObjectURL(blob); this._mediaUrls.push(u); return u; };
+      this._tracks = tracks.list;
+      this._subs = subs.list;
+      this.setState({
+        subList: subs.list.map(x => {
+          const cues = UnoMedia.parseVtt(x.vtt);
+          return { id: x.id, label: x.label, name: x.name, cues: cues.length, end: cues.length ? cues[cues.length - 1][1] : 0, first: cues.length ? cues[0][2] : '' };
+        }),
+        vid: video ? { name: video.name, duration: video.duration, sizeMb: video.blob.size / 1048576, url: url(video.blob) } : null,
+        trkList: tracks.list.map(t => ({ id: t.id, label: t.label, name: t.name, duration: t.duration, url: url(t.blob) })),
+        trkDefault: tracks.defaultId
+      });
+      this.measureVideo(video ? null : UnoMedia.DEFAULTS.video.src, video ? video.duration : 0);
+    }).catch(() => this.setState({ vidMsg: 'Este navegador no permite guardar archivos (IndexedDB bloqueado).', vidError: true }));
+  }
+
+  /* Duración del video vigente, para comparar con la de cada pista. */
+  measureVideo(src, known) {
+    if (!src) { this.setState({ vidDuration: known }); return; }
+    this.mediaMeta('video', src).then(m => this.setState({ vidDuration: m.duration })).catch(() => this.setState({ vidDuration: 0 }));
+  }
+
+  /* Carga los metadatos de un archivo de audio o video y devuelve el elemento. */
+  mediaMeta(kind, src) {
+    return new Promise((resolve, reject) => {
+      const el = document.createElement(kind);
+      el.preload = 'auto';
+      el.muted = true;
+      el.onloadedmetadata = () => (isFinite(el.duration) && el.duration > 0 ? resolve(el) : reject(new Error('sin duración')));
+      el.onerror = () => reject(new Error('no se pudo decodificar'));
+      el.src = src;
+    });
+  }
+
+  seekFrame(v, t) {
+    return new Promise(resolve => {
+      const done = () => { clearTimeout(timer); v.removeEventListener('seeked', done); resolve(); };
+      const timer = setTimeout(done, 4000);
+      v.addEventListener('seeked', done);
+      v.currentTime = t;
+    });
+  }
+
+  /* Dibuja el cuadro actual del video recortado tipo `object-fit: cover`. */
+  drawCover(ctx, v, x, y, w, h) {
+    const scale = Math.max(w / v.videoWidth, h / v.videoHeight);
+    const sw = w / scale, sh = h / scale;
+    ctx.drawImage(v, (v.videoWidth - sw) / 2, (v.videoHeight - sh) / 2, sw, sh, x, y, w, h);
+  }
+
+  canvasBlob(canvas, quality) {
+    return new Promise((resolve, reject) => canvas.toBlob(b => (b ? resolve(b) : reject(new Error('canvas vacío'))), 'image/jpeg', quality));
+  }
+
+  /* Genera la miniatura y la tira de previews de la línea de reproducción,
+     igual que los archivos de demostración (media/cobrar-cliente-*.jpg). */
+  async buildVideoImages(v) {
+    const dur = v.duration;
+    const poster = document.createElement('canvas');
+    poster.width = v.videoWidth; poster.height = v.videoHeight;
+    await this.seekFrame(v, Math.min(1, dur / 10));
+    poster.getContext('2d').drawImage(v, 0, 0);
+    const strip = document.createElement('canvas');
+    strip.width = PREVIEW_W * PREVIEW_FRAMES; strip.height = PREVIEW_H;
+    const ctx = strip.getContext('2d');
+    for (let i = 0; i < PREVIEW_FRAMES; i++) {
+      await this.seekFrame(v, (i + 0.5) * dur / PREVIEW_FRAMES);
+      this.drawCover(ctx, v, i * PREVIEW_W, 0, PREVIEW_W, PREVIEW_H);
+    }
+    return { poster: await this.canvasBlob(poster, 0.85), previews: await this.canvasBlob(strip, 0.8) };
+  }
+
+  onVideoFile = e => {
+    const input = e.target;
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file || this.state.vidBusy) return;
+    if (file.type !== 'video/mp4' && !/\.mp4$/i.test(file.name)) {
+      this.setState({ vidMsg: 'Formato no permitido: el video debe ser MP4.', vidError: true });
+      return;
+    }
+    if (file.size > VIDEO_MAX_MB * 1024 * 1024) {
+      this.setState({ vidMsg: 'El video supera los ' + VIDEO_MAX_MB + ' MB permitidos.', vidError: true });
+      return;
+    }
+    this.setState({ vidBusy: true, vidMsg: 'Procesando “' + file.name + '”: generando miniatura y previews…', vidError: false });
+    const src = URL.createObjectURL(file);
+    this.mediaMeta('video', src)
+      .then(v => this.buildVideoImages(v).then(imgs => ({ v, imgs })))
+      .then(({ v, imgs }) => UnoMedia.putVideo({ blob: file, name: file.name, duration: v.duration, poster: imgs.poster, previews: imgs.previews }))
+      .then(() => {
+        this.setState({ vidBusy: false, vidMsg: 'Video “' + file.name + '” publicado en la landing.', vidError: false });
+        this.loadMedia();
+      })
+      .catch(err => {
+        const quota = err && err.name === 'QuotaExceededError';
+        this.setState({ vidBusy: false, vidError: true, vidMsg: quota ? 'No hay espacio en el almacenamiento del navegador para este video.' : 'No se pudo procesar el video. Verifica que sea un MP4 válido (H.264).' });
+      })
+      .finally(() => URL.revokeObjectURL(src));
+  };
+
+  removeVideo() {
+    this.askConfirm({
+      title: '¿Quitar el video subido?',
+      message: 'La landing volverá a mostrar el video de demostración. Las pistas de audio cargadas se conservan.',
+      confirmText: 'Quitar video',
+      onConfirm: () => UnoMedia.deleteVideo().then(() => {
+        this.setState({ vidMsg: 'Video eliminado: la landing usa el de demostración.', vidError: false });
+        this.loadMedia();
+      })
+    });
+  }
+
+  onTrackFile = e => {
+    this._trkInput = e.target;
+    const file = e.target.files && e.target.files[0];
+    this._trkFile = file || null;
+    this.setState({ trkMsg: '', trkError: false });
+  };
+
+  addTrack = () => {
+    const file = this._trkFile;
+    const label = this.state.trkLabel.trim();
+    const fail = trkMsg => this.setState({ trkMsg, trkError: true });
+    if (!label) return fail('Escribe el idioma de la pista (por ejemplo, “Español”).');
+    if (this.state.trkList.some(t => t.label.toLowerCase() === label.toLowerCase())) return fail('Ya existe una pista llamada “' + label + '”.');
+    if (!file) return fail('Elige el archivo de audio.');
+    if (!file.type.startsWith('audio/') && !AUDIO_EXT.test(file.name)) return fail('Formato no permitido: usa MP3, M4A, AAC, OGG, OPUS, WAV o WEBM.');
+    if (file.size > AUDIO_MAX_MB * 1024 * 1024) return fail('La pista supera los ' + AUDIO_MAX_MB + ' MB permitidos.');
+    const src = URL.createObjectURL(file);
+    this.mediaMeta('audio', src).then(a => {
+      const rec = { id: 'trk-' + Date.now(), label, name: file.name, duration: a.duration, blob: file };
+      const list = [...(this._tracks || []), rec];
+      const defaultId = this.state.trkDefault && list.some(t => t.id === this.state.trkDefault) ? this.state.trkDefault : rec.id;
+      return UnoMedia.putTracks({ defaultId, list }).then(() => rec);
+    }).then(rec => {
+      const vd = this.state.vidDuration;
+      const off = vd && Math.abs(rec.duration - vd) > AUDIO_DRIFT_WARN;
+      this._trkFile = null;
+      if (this._trkInput) this._trkInput.value = '';
+      this.setState({
+        trkLabel: '', trkError: !!off,
+        trkMsg: off
+          ? 'Pista “' + label + '” agregada, pero dura ' + this.secs(rec.duration) + ' y el video ' + this.secs(vd) + ': puede no coincidir.'
+          : 'Pista “' + label + '” agregada a la landing.'
+      });
+      this.loadMedia();
+    }).catch(err => fail(err && err.name === 'QuotaExceededError'
+      ? 'No hay espacio en el almacenamiento del navegador para esta pista.'
+      : 'No se pudo leer el audio. Verifica que el archivo no esté dañado.'))
+      .finally(() => URL.revokeObjectURL(src));
+  };
+
+  saveTracks(list, defaultId, msg) {
+    UnoMedia.putTracks({ defaultId, list }).then(() => {
+      if (msg) this.setState({ trkMsg: msg, trkError: false });
+      this.loadMedia();
+    }).catch(() => this.setState({ trkMsg: 'No se pudieron guardar los cambios.', trkError: true }));
+  }
+
+  moveTrack(id, dir) {
+    const list = (this._tracks || []).slice();
+    const i = list.findIndex(t => t.id === id), j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    this.saveTracks(list, this.state.trkDefault);
+  }
+
+  setDefaultTrack(t) {
+    this.saveTracks(this._tracks || [], t.id, 'La landing arranca ahora con la pista “' + t.label + '”.');
+  }
+
+  removeTrack(t) {
+    this.askConfirm({
+      title: '¿Eliminar pista de audio?',
+      message: 'Se eliminará la pista “' + t.label + '” de la landing.' + (this.state.trkList.length === 1 ? ' Al no quedar pistas, la landing vuelve a usar las de demostración.' : ''),
+      confirmText: 'Eliminar',
+      onConfirm: () => {
+        const list = (this._tracks || []).filter(x => x.id !== t.id);
+        const defaultId = this.state.trkDefault === t.id ? (list[0] ? list[0].id : null) : this.state.trkDefault;
+        this.saveTracks(list, defaultId, 'Pista “' + t.label + '” eliminada.');
+      }
+    });
+  }
+
+  /* ---- Subtítulos (.vtt) ---- */
+
+  onSubFile = e => {
+    this._subInput = e.target;
+    this._subFile = (e.target.files && e.target.files[0]) || null;
+    this.setState({ subMsg: '', subError: false });
+  };
+
+  addSub = () => {
+    const file = this._subFile;
+    const label = this.state.subLabel.trim();
+    const fail = subMsg => this.setState({ subMsg, subError: true });
+    if (!label) return fail('Escribe el idioma de los subtítulos (por ejemplo, “Español”).');
+    if (this.state.subList.some(x => x.label.toLowerCase() === label.toLowerCase())) return fail('Ya existen subtítulos llamados “' + label + '”.');
+    if (!file) return fail('Elige el archivo .vtt.');
+    if (!/\.vtt$/i.test(file.name) && file.type !== 'text/vtt') return fail('Formato no permitido: los subtítulos deben ser WebVTT (.vtt).');
+    if (file.size > SUBS_MAX_KB * 1024) return fail('El archivo supera los ' + SUBS_MAX_KB + ' KB permitidos.');
+    file.text().then(raw => {
+      const vtt = raw.replace(/^﻿/, '');
+      const invalid = msg => Object.assign(new Error(msg), { invalid: true });
+      if (!/^WEBVTT(\s|$)/.test(vtt)) throw invalid('El archivo no empieza con “WEBVTT”: no es un WebVTT válido.');
+      const cues = UnoMedia.parseVtt(vtt);
+      if (!cues.length) throw invalid('El archivo no tiene ningún subtítulo con tiempos válidos (00:00:00.000 --> 00:00:03.000).');
+      const rec = { id: 'sub-' + Date.now(), label, name: file.name, vtt };
+      return UnoMedia.putSubs({ list: [...(this._subs || []), rec] }).then(() => cues);
+    }).then(cues => {
+      const end = cues[cues.length - 1][1], vd = this.state.vidDuration;
+      const over = vd && end > vd + AUDIO_DRIFT_WARN;
+      this._subFile = null;
+      if (this._subInput) this._subInput.value = '';
+      this.setState({
+        subLabel: '', subError: !!over,
+        subMsg: over
+          ? 'Subtítulos “' + label + '” agregados, pero terminan en ' + this.secs(end) + ' y el video dura ' + this.secs(vd) + '.'
+          : 'Subtítulos “' + label + '” agregados (' + cues.length + ' líneas).'
+      });
+      this.loadMedia();
+    }).catch(err => fail(err && err.invalid ? err.message
+      : err && err.name === 'QuotaExceededError' ? 'No hay espacio en el almacenamiento del navegador.'
+      : 'No se pudo leer el archivo.'));
+  };
+
+  saveSubs(list, msg) {
+    UnoMedia.putSubs({ list }).then(() => {
+      if (msg) this.setState({ subMsg: msg, subError: false });
+      this.loadMedia();
+    }).catch(() => this.setState({ subMsg: 'No se pudieron guardar los cambios.', subError: true }));
+  }
+
+  moveSub(id, dir) {
+    const list = (this._subs || []).slice();
+    const i = list.findIndex(x => x.id === id), j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    this.saveSubs(list);
+  }
+
+  removeSub(x) {
+    this.askConfirm({
+      title: '¿Eliminar subtítulos?',
+      message: 'Se eliminarán los subtítulos “' + x.label + '” de la landing.' + (this.state.subList.length === 1 ? ' Al no quedar ninguno, la landing vuelve a usar los de demostración.' : ''),
+      confirmText: 'Eliminar',
+      onConfirm: () => this.saveSubs((this._subs || []).filter(y => y.id !== x.id), 'Subtítulos “' + x.label + '” eliminados.')
+    });
+  }
+
+  secs(n) {
+    const s = Math.round(n || 0);
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + ' min';
+  }
+
   pager(total, page, setPage) {
     const pages = Math.max(1, Math.ceil(total / PER_PAGE));
     const cur = Math.min(page, pages - 1);
@@ -496,6 +791,7 @@ class Component extends BaseLogic {
     if (/^[0-9a-fA-F]{6}$/.test(v)) v = '#' + v;
     if (/^#[0-9a-fA-F]{3}$/.test(v)) v = '#' + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
     if (/^#[0-9a-fA-F]{6}$/.test(v)) setColor(i, v.toUpperCase());
+    else if (!v) setColor(i, null);   // vacío: vuelve al color sugerido del placeholder
     this.setDraft(i, null);
   }
 
@@ -503,9 +799,11 @@ class Component extends BaseLogic {
     const isDark = this.state.paletteMode === 'dark';
     const defaultColors = isDark ? DEF_COLORS_DARK.slice() : DEF_COLORS_LIGHT.slice();
     const p = id === 'new' ? null : this.state.palettes.find(x => x.id === id);
+    /* Los campos arrancan vacíos: `base` (colores sugeridos o los actuales al editar)
+       se muestra como placeholder y es lo que se guarda si el campo queda vacío. */
     this.setState({
       editing: id,
-      form: { name: p ? p.name : '', colors: p ? p.colors.slice() : defaultColors },
+      form: { base: { name: p ? p.name : '', colors: p ? p.colors.slice() : defaultColors }, name: '', colors: [null, null, null, null, null] },
       drafts: {}
     });
   }
@@ -514,9 +812,12 @@ class Component extends BaseLogic {
     const t = id === 'new' ? null : this.state.types.find(x => x.id === id);
     this.setState({
       tediting: id,
-      tform: t
-        ? { name: t.name, font: t.font, family: t.family || '', face: t.face, h1: t.h1, h3: t.h3, p: t.p }
-        : { name: '', font: 'Archivo (sistema)', family: '', face: null, h1: 40, h3: 22, p: 16 },
+      /* Nombre y tamaños arrancan vacíos; `base` va de placeholder y se usa si quedan vacíos. */
+      tform: {
+        base: t ? { name: t.name, h1: t.h1, h3: t.h3, p: t.p } : { name: '', h1: 40, h3: 22, p: 16 },
+        name: '', h1: null, h3: null, p: null,
+        font: t ? t.font : 'Archivo (sistema)', family: t ? t.family || '' : '', face: t ? t.face : null
+      },
       fontMsg: t && t.family ? 'Fuente actual: ' + t.font : 'Ningún archivo cargado. Se usa la fuente del sistema.',
       fontError: false
     });
@@ -546,7 +847,8 @@ class Component extends BaseLogic {
     };
     const modePals = (this.state.palettes || []).filter(p => getModeOfPalette(p) === this.state.paletteMode);
     const activePal = modePals.find(p => p.id === activeId) || modePals[0];
-    const c = this.state.form ? this.state.form.colors : (activePal ? activePal.colors : (isDark ? DEF_COLORS_DARK : DEF_COLORS_LIGHT));
+    const form = this.state.form;
+    const c = form ? form.base.colors.map((b, i) => form.colors[i] || b) : (activePal ? activePal.colors : (isDark ? DEF_COLORS_DARK : DEF_COLORS_LIGHT));
     const pieceColors = [c[0], c[1], c[3], c[0], c[1], c[4], c[2]];
     const strokeColor = isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(0, 0, 0, 0.16)';
     polys.forEach((p, idx) => {
@@ -708,10 +1010,11 @@ class Component extends BaseLogic {
     const active = modePalettes.find(x => x.id === activeId) || modePalettes[0] || { colors: isDarkMode ? DEF_COLORS_DARK : DEF_COLORS_LIGHT, name: '—' };
 
     const form = st.form;
-    const c = form ? form.colors : active.colors;
+    const formColors = form ? form.base.colors.map((b, i) => form.colors[i] || b) : null;
+    const c = formColors || active.colors;
     const activeType = st.types.find(x => x.id === st.activeTypeId) || st.types[0] || { name: '—', font: 'Archivo (sistema)', family: '', h1: 40, h3: 22, p: 16 };
     const tf = st.tform;
-    const cur = tf || activeType;
+    const cur = tf ? { ...tf, h1: tf.h1 ?? tf.base.h1, h3: tf.h3 ?? tf.base.h3, p: tf.p ?? tf.base.p } : activeType;
     const pub = { colors: active.colors, h1: activeType.h1, h3: activeType.h3, p: activeType.p, fontFamily: activeType.family || '' };
     const previewFont = (cur.family ? '"' + cur.family + '", ' : '') + 'Archivo, sans-serif';
     const liveFont = (pub.fontFamily ? '"' + pub.fontFamily + '", ' : '') + 'Archivo, sans-serif';
@@ -734,7 +1037,7 @@ class Component extends BaseLogic {
     });
 
     const num = (key, v) => {
-      const n = Math.max(8, Math.min(120, Number(v) || 0));
+      const n = v === '' || v == null ? null : Math.max(8, Math.min(120, Number(v) || 0));
       this.setState(s => s.tform ? { tform: { ...s.tform, [key]: n } } : {});
     };
 
@@ -778,6 +1081,93 @@ class Component extends BaseLogic {
         this.setState({ tab: 'gallery' });
       },
       tabGalleryStyle: tab(st.tab === 'gallery'),
+      isMedia: st.tab === 'media',
+      goMedia: () => {
+        if (this.tangramLooping) this.stopTangramLoop();
+        this.setState({ tab: 'media' });
+      },
+      tabMediaStyle: tab(st.tab === 'media'),
+
+      // Módulo Video y pistas de audio
+      onVideoFile: this.onVideoFile,
+      vidIdle: !st.vidBusy,
+      vidBusy: st.vidBusy,
+      vidHas: !!st.vid,
+      vidDemo: !st.vid,
+      vidUrl: st.vid ? st.vid.url : UnoMedia.DEFAULTS.video.src,
+      vidName: st.vid ? st.vid.name : 'cobrar-cliente-sin-audio.mp4 (demostración)',
+      vidInfo: st.vid
+        ? this.secs(st.vid.duration) + ' · ' + st.vid.sizeMb.toFixed(1) + ' MB'
+        : (st.vidDuration ? this.secs(st.vidDuration) + ' · ' : '') + 'Archivo de media/, se usa mientras no subas uno',
+      removeVideo: () => this.removeVideo(),
+      vidMsg: st.vidMsg,
+      vidMsgColor: st.vidError ? '#dc2626' : 'rgba(15,23,42,.6)',
+      trkLabel: st.trkLabel,
+      onTrkLabel: e => this.setState({ trkLabel: e.target.value }),
+      onTrackFile: this.onTrackFile,
+      addTrack: this.addTrack,
+      trkMsg: st.trkMsg,
+      trkMsgColor: st.trkError ? '#dc2626' : 'rgba(15,23,42,.6)',
+      trkCount: st.trkList.length === 1 ? '1 pista' : st.trkList.length + ' pistas',
+      trkEmpty: st.trkList.length === 0,
+      trkHasItems: st.trkList.length > 0,
+      trkItems: st.trkList.map((t, i) => {
+        const first = i === 0, last = i === st.trkList.length - 1;
+        const isDefault = t.id === st.trkDefault;
+        const move = disabled => ({
+          width: '34px', height: '34px', borderRadius: '8px', border: '1px solid rgba(15,23,42,.12)',
+          background: '#fff', color: '#0f172a', fontSize: '16px', lineHeight: 1,
+          opacity: disabled ? .35 : 1, cursor: disabled ? 'default' : 'pointer'
+        });
+        const off = st.vidDuration && Math.abs(t.duration - st.vidDuration) > AUDIO_DRIFT_WARN;
+        return {
+          label: t.label,
+          url: t.url,
+          info: t.name + ' · ' + this.secs(t.duration) + (off ? ' · ⚠ no coincide con el video (' + this.secs(st.vidDuration) + ')' : ''),
+          infoColor: off ? '#b45309' : 'rgba(15,23,42,.55)',
+          isDefault,
+          notDefault: !isDefault,
+          makeDefault: () => this.setDefaultTrack(t),
+          up: () => this.moveTrack(t.id, -1),
+          down: () => this.moveTrack(t.id, 1),
+          upStyle: move(first),
+          downStyle: move(last),
+          upDisabled: first,
+          downDisabled: last,
+          remove: () => this.removeTrack(t)
+        };
+      }),
+      subLabel: st.subLabel,
+      onSubLabel: e => this.setState({ subLabel: e.target.value }),
+      onSubFile: this.onSubFile,
+      addSub: this.addSub,
+      subMsg: st.subMsg,
+      subMsgColor: st.subError ? '#dc2626' : 'rgba(15,23,42,.6)',
+      subCount: st.subList.length === 1 ? '1 idioma' : st.subList.length + ' idiomas',
+      subEmpty: st.subList.length === 0,
+      subHasItems: st.subList.length > 0,
+      subItems: st.subList.map((x, i) => {
+        const first = i === 0, last = i === st.subList.length - 1;
+        const move = disabled => ({
+          width: '34px', height: '34px', borderRadius: '8px', border: '1px solid rgba(15,23,42,.12)',
+          background: '#fff', color: '#0f172a', fontSize: '16px', lineHeight: 1,
+          opacity: disabled ? .35 : 1, cursor: disabled ? 'default' : 'pointer'
+        });
+        const over = st.vidDuration && x.end > st.vidDuration + AUDIO_DRIFT_WARN;
+        return {
+          label: x.label,
+          info: x.name + ' · ' + x.cues + (x.cues === 1 ? ' línea' : ' líneas') + ' · hasta ' + this.secs(x.end) + (over ? ' · ⚠ más largo que el video (' + this.secs(st.vidDuration) + ')' : ''),
+          infoColor: over ? '#b45309' : 'rgba(15,23,42,.55)',
+          first: '“' + x.first + '”',
+          up: () => this.moveSub(x.id, -1),
+          down: () => this.moveSub(x.id, 1),
+          upStyle: move(first),
+          downStyle: move(last),
+          upDisabled: first,
+          downDisabled: last,
+          remove: () => this.removeSub(x)
+        };
+      }),
 
       // Módulo Galería del carrusel
       galCropping: !!st.galCrop,
@@ -913,11 +1303,12 @@ class Component extends BaseLogic {
       startNew: () => this.startForm('new'),
       cancelForm: () => this.setState({ editing: null, form: null, drafts: {} }),
       formName: form ? form.name : '',
+      formNamePh: form && form.base.name ? form.base.name : 'Nombre de la paleta',
       onFormName: e => this.setState(s => ({ form: { ...s.form, name: e.target.value } })),
       commitForm: () => this.setState(s => {
         if (!s.form) return {};
-        const name = (s.form.name || '').trim() || ('Paleta ' + (s.paletteMode === 'dark' ? 'Oscuro' : 'Claro'));
-        const colors = s.form.colors.slice();
+        const name = (s.form.name || '').trim() || s.form.base.name || ('Paleta ' + (s.paletteMode === 'dark' ? 'Oscuro' : 'Claro'));
+        const colors = s.form.base.colors.map((b, i) => s.form.colors[i] || b);
         let palettes, palPage = s.palPage, status;
         if (s.editing === 'new') {
           const newId = Date.now();
@@ -932,9 +1323,10 @@ class Component extends BaseLogic {
         this.persist({ palettes });
         return { palettes, palPage, editing: null, form: null, drafts: {}, status };
       }),
-      formSlots: (form ? form.colors : []).map((hex, i) => ({
+      formSlots: (formColors || []).map((hex, i) => ({
         label: LABELS[i], hex,
-        draft: (st.drafts && st.drafts[i] != null) ? st.drafts[i] : hex,
+        draft: (st.drafts && st.drafts[i] != null) ? st.drafts[i] : (form.colors[i] || ''),
+        ph: form.base.colors[i],
         onPick: e => { this.setDraft(i, null); setColor(i, e.target.value); },
         onType: e => this.setDraft(i, e.target.value),
         onCommit: e => this.commitDraft(i, e.target.value, setColor),
@@ -1042,12 +1434,13 @@ class Component extends BaseLogic {
       startNewType: () => this.startTypeForm('new'),
       cancelTypeForm: () => this.setState({ tediting: null, tform: null, fontMsg: 'Ningún archivo cargado. Se usa la fuente del sistema.', fontError: false }),
       typeFormName: tf ? tf.name : '',
+      typeFormNamePh: tf && tf.base.name ? tf.base.name : 'Nombre del estilo',
       onTypeFormName: e => this.setState(s => ({ tform: { ...s.tform, name: e.target.value } })),
       commitTypeForm: () => this.setState(s => {
         if (!s.tform) return {};
         const f = s.tform;
-        const name = (f.name || '').trim() || 'Estilo sin nombre';
-        const rec = { name, font: f.font || 'Archivo (sistema)', family: f.family || '', face: f.face, h1: f.h1, h3: f.h3, p: f.p };
+        const name = (f.name || '').trim() || f.base.name || 'Estilo sin nombre';
+        const rec = { name, font: f.font || 'Archivo (sistema)', family: f.family || '', face: f.face, h1: f.h1 ?? f.base.h1, h3: f.h3 ?? f.base.h3, p: f.p ?? f.base.p };
         let types, typPage = s.typPage, status;
         if (s.tediting === 'new') {
           types = s.types.concat([{ id: Date.now(), ...rec }]);
@@ -1061,9 +1454,9 @@ class Component extends BaseLogic {
         return { types, typPage, tediting: null, tform: null, status };
       }),
       sizeFields: [
-        { label: 'Títulos (h1 / h2)', hint: 'Encabezados principales', value: cur.h1, onChange: e => num('h1', e.target.value), inc: () => num('h1', cur.h1 + 1), dec: () => num('h1', cur.h1 - 1) },
-        { label: 'Subtítulos (h3 / h4)', hint: 'Encabezados de sección', value: cur.h3, onChange: e => num('h3', e.target.value), inc: () => num('h3', cur.h3 + 1), dec: () => num('h3', cur.h3 - 1) },
-        { label: 'Párrafos (p)', hint: 'Texto de cuerpo y botones', value: cur.p, onChange: e => num('p', e.target.value), inc: () => num('p', cur.p + 1), dec: () => num('p', cur.p - 1) }
+        { label: 'Títulos (h1 / h2)', hint: 'Encabezados principales', value: tf && tf.h1 == null ? '' : cur.h1, ph: tf ? tf.base.h1 : '', onChange: e => num('h1', e.target.value), inc: () => num('h1', cur.h1 + 1), dec: () => num('h1', cur.h1 - 1) },
+        { label: 'Subtítulos (h3 / h4)', hint: 'Encabezados de sección', value: tf && tf.h3 == null ? '' : cur.h3, ph: tf ? tf.base.h3 : '', onChange: e => num('h3', e.target.value), inc: () => num('h3', cur.h3 + 1), dec: () => num('h3', cur.h3 - 1) },
+        { label: 'Párrafos (p)', hint: 'Texto de cuerpo y botones', value: tf && tf.p == null ? '' : cur.p, ph: tf ? tf.base.p : '', onChange: e => num('p', e.target.value), inc: () => num('p', cur.p + 1), dec: () => num('p', cur.p - 1) }
       ],
       typePage: filteredTypes.slice(typ.cur * PER_PAGE, typ.cur * PER_PAGE + PER_PAGE).map(t => {
         const isActive = t.id === st.activeTypeId;
@@ -1216,6 +1609,7 @@ class Component extends BaseLogic {
     <button sc-camel-on-click="{{ goType }}" style="{{ tabTypeStyle }}">2 · Configuración Textos / Tipografía</button>
     <button sc-camel-on-click="{{ goTangram }}" style="{{ tabTangramStyle }}">3 · Previsualización Tangram</button>
     <button sc-camel-on-click="{{ goGallery }}" style="{{ tabGalleryStyle }}">4 · Galería del Carrusel</button>
+    <button sc-camel-on-click="{{ goMedia }}" style="{{ tabMediaStyle }}">5 · Video y Audio</button>
   </div>
 
 
@@ -1287,12 +1681,12 @@ class Component extends BaseLogic {
             <div style="display:flex;align-items:center;gap:12px;border:1px solid rgba(15,23,42,.10);background:#fff;border-radius:12px;padding:10px 14px">
               <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:rgba(15,23,42,.45);width:60px">{{ s.label }}</span>
               <input type="color" value="{{ s.hex }}" sc-camel-on-change="{{ s.onPick }}" aria-label="Color" style="width:50px;height:38px;border-radius:10px;flex:none">
-              <input type="text" value="{{ s.draft }}" sc-camel-on-change="{{ s.onType }}" sc-camel-on-blur="{{ s.onCommit }}" sc-camel-on-key-down="{{ s.onKey }}" spellcheck="false" style="flex:1;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:10px 12px;font:500 15px ui-monospace,Menlo,monospace;text-transform:uppercase;color:#0f172a;background:#f8fafc">
+              <input type="text" value="{{ s.draft }}" placeholder="{{ s.ph }}" sc-camel-on-change="{{ s.onType }}" sc-camel-on-blur="{{ s.onCommit }}" sc-camel-on-key-down="{{ s.onKey }}" spellcheck="false" style="flex:1;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:10px 12px;font:500 15px ui-monospace,Menlo,monospace;text-transform:uppercase;color:#0f172a;background:#f8fafc">
             </div>
           </sc-for>
         </div>
         <div style="margin-top:18px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-          <input type="text" value="{{ formName }}" sc-camel-on-change="{{ onFormName }}" placeholder="Nombre de la paleta" style="flex:1 1 220px;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;background:#fff">
+          <input type="text" value="{{ formName }}" sc-camel-on-change="{{ onFormName }}" placeholder="{{ formNamePh }}" style="flex:1 1 220px;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;background:#fff">
           <button sc-camel-on-click="{{ commitForm }}" style="background:#4B51F6;color:#fff;border:0;border-radius:10px;padding:12px 24px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap;transition:background .2s" style-hover="background:#297C7C">Crear paleta para {{ modeTitle }}</button>
           <button sc-camel-on-click="{{ cancelForm }}" style="background:transparent;color:rgba(15,23,42,.7);border:1px solid rgba(15,23,42,.16);border-radius:10px;padding:11px 20px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap">Cancelar</button>
         </div>
@@ -1335,12 +1729,12 @@ class Component extends BaseLogic {
                         <div style="display:flex;align-items:center;gap:12px;border:1px solid rgba(15,23,42,.10);background:#fff;border-radius:12px;padding:10px 14px">
                           <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:rgba(15,23,42,.45);width:60px">{{ s.label }}</span>
                           <input type="color" value="{{ s.hex }}" sc-camel-on-change="{{ s.onPick }}" aria-label="Color" style="width:50px;height:38px;border-radius:10px;flex:none">
-                          <input type="text" value="{{ s.draft }}" sc-camel-on-change="{{ s.onType }}" sc-camel-on-blur="{{ s.onCommit }}" sc-camel-on-key-down="{{ s.onKey }}" spellcheck="false" style="flex:1;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:10px 12px;font:500 15px ui-monospace,Menlo,monospace;text-transform:uppercase;color:#0f172a;background:#f8fafc">
+                          <input type="text" value="{{ s.draft }}" placeholder="{{ s.ph }}" sc-camel-on-change="{{ s.onType }}" sc-camel-on-blur="{{ s.onCommit }}" sc-camel-on-key-down="{{ s.onKey }}" spellcheck="false" style="flex:1;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:10px 12px;font:500 15px ui-monospace,Menlo,monospace;text-transform:uppercase;color:#0f172a;background:#f8fafc">
                         </div>
                       </sc-for>
                     </div>
                     <div style="margin-top:18px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-                      <input type="text" value="{{ formName }}" sc-camel-on-change="{{ onFormName }}" placeholder="Nombre de la paleta" style="flex:1 1 220px;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;background:#fff">
+                      <input type="text" value="{{ formName }}" sc-camel-on-change="{{ onFormName }}" placeholder="{{ formNamePh }}" style="flex:1 1 220px;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;background:#fff">
                       <button sc-camel-on-click="{{ commitForm }}" style="background:#4B51F6;color:#fff;border:0;border-radius:10px;padding:12px 24px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap;transition:background .2s" style-hover="background:#297C7C">Guardar cambios</button>
                       <button sc-camel-on-click="{{ cancelForm }}" style="background:transparent;color:rgba(15,23,42,.7);border:1px solid rgba(15,23,42,.16);border-radius:10px;padding:11px 20px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap">Cancelar</button>
                     </div>
@@ -1417,7 +1811,7 @@ class Component extends BaseLogic {
                 <div style="font-size:13px;color:rgba(15,23,42,.5);margin-top:2px">{{ f.hint }}</div>
               </div>
               <button sc-camel-on-click="{{ f.dec }}" aria-label="Reducir" style="width:38px;height:38px;border-radius:999px;border:1px solid rgba(15,23,42,.14);background:#f8fafc;font-size:18px;cursor:pointer">−</button>
-              <input type="number" min="8" max="120" value="{{ f.value }}" sc-camel-on-change="{{ f.onChange }}" style="width:80px;border:1px solid rgba(15,23,42,.14);border-radius:999px;padding:10px;font:600 16px Archivo,sans-serif;text-align:center;background:#fff;color:#0f172a">
+              <input type="number" min="8" max="120" value="{{ f.value }}" placeholder="{{ f.ph }}" sc-camel-on-change="{{ f.onChange }}" style="width:80px;border:1px solid rgba(15,23,42,.14);border-radius:999px;padding:10px;font:600 16px Archivo,sans-serif;text-align:center;background:#fff;color:#0f172a">
               <button sc-camel-on-click="{{ f.inc }}" aria-label="Aumentar" style="width:38px;height:38px;border-radius:999px;border:1px solid rgba(15,23,42,.14);background:#f8fafc;font-size:18px;cursor:pointer">+</button>
               <span style="font-size:13px;color:rgba(15,23,42,.45);width:20px">px</span>
             </div>
@@ -1435,7 +1829,7 @@ class Component extends BaseLogic {
         </div>
 
         <div style="margin-top:18px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-          <input type="text" value="{{ typeFormName }}" sc-camel-on-change="{{ onTypeFormName }}" placeholder="Nombre del estilo" style="flex:1 1 220px;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;background:#fff">
+          <input type="text" value="{{ typeFormName }}" sc-camel-on-change="{{ onTypeFormName }}" placeholder="{{ typeFormNamePh }}" style="flex:1 1 220px;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;background:#fff">
           <button sc-camel-on-click="{{ commitTypeForm }}" style="background:#4B51F6;color:#fff;border:0;border-radius:10px;padding:12px 24px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap;transition:background .2s" style-hover="background:#297C7C">Crear tipografía</button>
           <button sc-camel-on-click="{{ cancelTypeForm }}" style="background:transparent;color:rgba(15,23,42,.7);border:1px solid rgba(15,23,42,.16);border-radius:10px;padding:11px 20px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap">Cancelar</button>
         </div>
@@ -1486,7 +1880,7 @@ class Component extends BaseLogic {
                             <div style="font-size:13px;color:rgba(15,23,42,.5);margin-top:2px">{{ f.hint }}</div>
                           </div>
                           <button sc-camel-on-click="{{ f.dec }}" aria-label="Reducir" style="width:38px;height:38px;border-radius:999px;border:1px solid rgba(15,23,42,.14);background:#f8fafc;font-size:18px;cursor:pointer">−</button>
-                          <input type="number" min="8" max="120" value="{{ f.value }}" sc-camel-on-change="{{ f.onChange }}" style="width:80px;border:1px solid rgba(15,23,42,.14);border-radius:9px;padding:10px;font:600 16px Archivo,sans-serif;text-align:center;background:#fff;color:#0f172a">
+                          <input type="number" min="8" max="120" value="{{ f.value }}" placeholder="{{ f.ph }}" sc-camel-on-change="{{ f.onChange }}" style="width:80px;border:1px solid rgba(15,23,42,.14);border-radius:9px;padding:10px;font:600 16px Archivo,sans-serif;text-align:center;background:#fff;color:#0f172a">
                           <button sc-camel-on-click="{{ f.inc }}" aria-label="Aumentar" style="width:38px;height:38px;border-radius:999px;border:1px solid rgba(15,23,42,.14);background:#f8fafc;font-size:18px;cursor:pointer">+</button>
                           <span style="font-size:13px;color:rgba(15,23,42,.45);width:20px">px</span>
                         </div>
@@ -1504,7 +1898,7 @@ class Component extends BaseLogic {
                     </div>
 
                     <div style="margin-top:18px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-                      <input type="text" value="{{ typeFormName }}" sc-camel-on-change="{{ onTypeFormName }}" placeholder="Nombre del estilo" style="flex:1 1 220px;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;background:#fff">
+                      <input type="text" value="{{ typeFormName }}" sc-camel-on-change="{{ onTypeFormName }}" placeholder="{{ typeFormNamePh }}" style="flex:1 1 220px;min-width:0;border:1px solid rgba(15,23,42,.14);border-radius:10px;padding:12px 14px;font:500 15px Archivo,sans-serif;color:#0f172a;background:#fff">
                       <button sc-camel-on-click="{{ commitTypeForm }}" style="background:#4B51F6;color:#fff;border:0;border-radius:10px;padding:12px 24px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap;transition:background .2s" style-hover="background:#297C7C">Guardar cambios</button>
                       <button sc-camel-on-click="{{ cancelForm }}" style="background:transparent;color:rgba(15,23,42,.7);border:1px solid rgba(15,23,42,.16);border-radius:10px;padding:11px 20px;font:600 15px Archivo,sans-serif;cursor:pointer;white-space:nowrap">Cancelar</button>
                     </div>
@@ -1788,6 +2182,139 @@ class Component extends BaseLogic {
                   <span style="flex:1"></span>
                   <button sc-camel-on-click="{{ gi.remove }}" style="background:rgba(239,68,68,.08);color:#dc2626;border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:6px 12px;font:600 13px Archivo,sans-serif;cursor:pointer" style-hover="background:rgba(239,68,68,.16)">Eliminar</button>
                 </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </section>
+
+  </main>
+  </sc-if>
+
+
+  <!-- MÓDULO 5: VIDEO Y PISTAS DE AUDIO (js/media-store.js) -->
+  <sc-if value="{{ isMedia }}" hint-placeholder-val="{{ false }}">
+  <main style="max-width:1240px;margin:0 auto;padding:22px 34px 0;display:flex;flex-direction:column;gap:22px">
+
+    <section style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;padding:26px">
+      <h2 style="margin:0 0 4px;font-size:21px;font-weight:700;letter-spacing:-.02em">Video de presentación</h2>
+      <p style="margin:0 0 20px;font-size:14px;color:rgba(15,23,42,.6)">Sube el video <strong>sin audio</strong> en MP4: el sonido sale de las pistas de abajo, una por idioma, y los subtítulos se cargan aparte. Si el archivo trae audio, la landing lo silencia. La miniatura y los previews de la línea de reproducción se generan automáticamente.</p>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;align-items:start">
+        <video src="{{ vidUrl }}" controls muted playsinline preload="metadata" style="display:block;width:100%;aspect-ratio:16/9;background:#0f172a;border-radius:14px"></video>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="min-width:0">
+            <div style="font-size:15px;font-weight:600;color:#0f172a;overflow-wrap:anywhere">{{ vidName }}</div>
+            <div style="font-size:13px;color:rgba(15,23,42,.55);margin-top:4px">{{ vidInfo }}</div>
+          </div>
+          <sc-if value="{{ vidIdle }}" hint-placeholder-val="{{ true }}">
+            <label style="display:flex;flex-direction:column;gap:10px;border:1.5px dashed rgba(15,23,42,.22);border-radius:14px;padding:18px;cursor:pointer;background:#fff">
+              <span style="font:600 15px Archivo,sans-serif">Elegir video (MP4 sin audio · máx. 200 MB)</span>
+              <input type="file" accept="video/mp4,.mp4" sc-camel-on-change="{{ onVideoFile }}" style="font-size:14px">
+            </label>
+          </sc-if>
+          <sc-if value="{{ vidBusy }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1.5px dashed rgba(75,81,246,.4);border-radius:14px;padding:18px;background:rgba(75,81,246,.05);font:600 14px Archivo,sans-serif;color:#4B51F6">Procesando video…</div>
+          </sc-if>
+          <sc-if value="{{ vidHas }}" hint-placeholder-val="{{ false }}">
+            <div><button sc-camel-on-click="{{ removeVideo }}" style="background:rgba(239,68,68,.08);color:#dc2626;border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:8px 14px;font:600 13px Archivo,sans-serif;cursor:pointer" style-hover="background:rgba(239,68,68,.16)">Quitar video y usar el de demostración</button></div>
+          </sc-if>
+        </div>
+      </div>
+
+      <p style="margin:14px 0 0;font-size:13px;color:{{ vidMsgColor }}">{{ vidMsg }}</p>
+    </section>
+
+    <section style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;padding:26px">
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+        <h2 style="margin:0;font-size:21px;font-weight:700;letter-spacing:-.02em">Pistas de audio</h2>
+        <span style="font-size:13px;color:rgba(15,23,42,.55)">{{ trkCount }}</span>
+      </div>
+      <p style="margin:0 0 20px;font-size:14px;color:rgba(15,23,42,.6)">Cada pista aparece en el menú “Pista de audio” del reproductor, en este orden. Deben durar lo mismo que el video para quedar sincronizadas.</p>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;border:1.5px dashed rgba(15,23,42,.22);border-radius:14px;padding:18px">
+        <label style="display:flex;flex-direction:column;gap:6px;flex:1 1 180px;min-width:0">
+          <span style="font:600 13px Archivo,sans-serif">Idioma (nombre en el menú)</span>
+          <input type="text" value="{{ trkLabel }}" sc-camel-on-change="{{ onTrkLabel }}" placeholder="Ej.: Español" maxlength="40" style="border:1px solid rgba(15,23,42,.18);border-radius:10px;padding:10px 12px;font:15px Archivo,sans-serif">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:6px;flex:2 1 260px;min-width:0">
+          <span style="font:600 13px Archivo,sans-serif">Archivo de audio (MP3, M4A, OGG, WAV… · máx. 50 MB)</span>
+          <input type="file" accept="audio/*,.m4a,.mp3,.aac,.ogg,.oga,.opus,.wav,.webm" sc-camel-on-change="{{ onTrackFile }}" style="font-size:14px">
+        </label>
+        <button sc-camel-on-click="{{ addTrack }}" style="background:#4B51F6;color:#fff;border:0;border-radius:12px;padding:12px 22px;font:700 14px Archivo,sans-serif;cursor:pointer;box-shadow:0 8px 20px rgba(75,81,246,0.3)" style-hover="background:#3b40c6">Agregar pista</button>
+      </div>
+      <p style="margin:14px 0 18px;font-size:13px;color:{{ trkMsgColor }}">{{ trkMsg }}</p>
+
+      <sc-if value="{{ trkEmpty }}" hint-placeholder-val="{{ false }}">
+        <p style="margin:0;padding:28px;border:1.5px dashed rgba(15,23,42,.16);border-radius:14px;text-align:center;font-size:14px;color:rgba(15,23,42,.55)">Aún no hay pistas cargadas. Mientras tanto, la landing usa las de demostración (Español e Inglés) de la carpeta media/.</p>
+      </sc-if>
+
+      <sc-if value="{{ trkHasItems }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <sc-for list="{{ trkItems }}" as="tk" hint-placeholder-count="2">
+            <div style="border:1px solid rgba(15,23,42,.10);border-radius:14px;background:#f8fafc;padding:14px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:14px">
+              <div style="flex:1 1 200px;min-width:0">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:15px;font-weight:700;color:#0f172a">{{ tk.label }}</span>
+                  <sc-if value="{{ tk.isDefault }}" hint-placeholder-val="{{ false }}">
+                    <span style="font:600 11px Archivo,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#4B51F6;background:rgba(75,81,246,.1);border-radius:999px;padding:3px 9px">Predeterminada</span>
+                  </sc-if>
+                </div>
+                <div style="font-size:12px;color:{{ tk.infoColor }};margin-top:3px;overflow-wrap:anywhere">{{ tk.info }}</div>
+              </div>
+              <audio src="{{ tk.url }}" controls preload="metadata" style="flex:1 1 240px;min-width:0;max-width:100%;height:36px"></audio>
+              <div style="display:flex;gap:6px;align-items:center">
+                <button sc-camel-on-click="{{ tk.up }}" disabled="{{ tk.upDisabled }}" aria-label="Subir en el menú" title="Subir en el menú" style="{{ tk.upStyle }}">↑</button>
+                <button sc-camel-on-click="{{ tk.down }}" disabled="{{ tk.downDisabled }}" aria-label="Bajar en el menú" title="Bajar en el menú" style="{{ tk.downStyle }}">↓</button>
+                <sc-if value="{{ tk.notDefault }}" hint-placeholder-val="{{ true }}">
+                  <button sc-camel-on-click="{{ tk.makeDefault }}" style="background:#f1f5f9;border:1px solid rgba(15,23,42,.1);border-radius:8px;padding:6px 12px;font:600 13px Archivo,sans-serif;color:#0f172a;cursor:pointer" style-hover="background:#e2e8f0">Predeterminada</button>
+                </sc-if>
+                <button sc-camel-on-click="{{ tk.remove }}" style="background:rgba(239,68,68,.08);color:#dc2626;border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:6px 12px;font:600 13px Archivo,sans-serif;cursor:pointer" style-hover="background:rgba(239,68,68,.16)">Eliminar</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </section>
+
+    <section style="background:#fff;border:1px solid rgba(15,23,42,.10);border-radius:18px;padding:26px">
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+        <h2 style="margin:0;font-size:21px;font-weight:700;letter-spacing:-.02em">Subtítulos</h2>
+        <span style="font-size:13px;color:rgba(15,23,42,.55)">{{ subCount }}</span>
+      </div>
+      <p style="margin:0 0 20px;font-size:14px;color:rgba(15,23,42,.6)">Un archivo WebVTT (.vtt) por idioma. Aparecen en el menú “Subtítulos” del reproductor, en este orden, y se eligen aparte del audio.</p>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;border:1.5px dashed rgba(15,23,42,.22);border-radius:14px;padding:18px">
+        <label style="display:flex;flex-direction:column;gap:6px;flex:1 1 180px;min-width:0">
+          <span style="font:600 13px Archivo,sans-serif">Idioma (nombre en el menú)</span>
+          <input type="text" value="{{ subLabel }}" sc-camel-on-change="{{ onSubLabel }}" placeholder="Ej.: Español" maxlength="40" style="border:1px solid rgba(15,23,42,.18);border-radius:10px;padding:10px 12px;font:15px Archivo,sans-serif">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:6px;flex:2 1 260px;min-width:0">
+          <span style="font:600 13px Archivo,sans-serif">Archivo de subtítulos (.vtt · máx. 512 KB)</span>
+          <input type="file" accept=".vtt,text/vtt" sc-camel-on-change="{{ onSubFile }}" style="font-size:14px">
+        </label>
+        <button sc-camel-on-click="{{ addSub }}" style="background:#4B51F6;color:#fff;border:0;border-radius:12px;padding:12px 22px;font:700 14px Archivo,sans-serif;cursor:pointer;box-shadow:0 8px 20px rgba(75,81,246,0.3)" style-hover="background:#3b40c6">Agregar subtítulos</button>
+      </div>
+      <p style="margin:14px 0 18px;font-size:13px;color:{{ subMsgColor }}">{{ subMsg }}</p>
+
+      <sc-if value="{{ subEmpty }}" hint-placeholder-val="{{ false }}">
+        <p style="margin:0;padding:28px;border:1.5px dashed rgba(15,23,42,.16);border-radius:14px;text-align:center;font-size:14px;color:rgba(15,23,42,.55)">Aún no hay subtítulos cargados. Mientras tanto, la landing usa los de demostración (Español e Inglés).</p>
+      </sc-if>
+
+      <sc-if value="{{ subHasItems }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <sc-for list="{{ subItems }}" as="sb" hint-placeholder-count="2">
+            <div style="border:1px solid rgba(15,23,42,.10);border-radius:14px;background:#f8fafc;padding:14px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:14px">
+              <div style="flex:1 1 260px;min-width:0">
+                <div style="font-size:15px;font-weight:700;color:#0f172a">{{ sb.label }}</div>
+                <div style="font-size:12px;color:{{ sb.infoColor }};margin-top:3px;overflow-wrap:anywhere">{{ sb.info }}</div>
+                <div style="font-size:13px;color:rgba(15,23,42,.7);margin-top:6px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sb.first }}</div>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center">
+                <button sc-camel-on-click="{{ sb.up }}" disabled="{{ sb.upDisabled }}" aria-label="Subir en el menú" title="Subir en el menú" style="{{ sb.upStyle }}">↑</button>
+                <button sc-camel-on-click="{{ sb.down }}" disabled="{{ sb.downDisabled }}" aria-label="Bajar en el menú" title="Bajar en el menú" style="{{ sb.downStyle }}">↓</button>
+                <button sc-camel-on-click="{{ sb.remove }}" style="background:rgba(239,68,68,.08);color:#dc2626;border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:6px 12px;font:600 13px Archivo,sans-serif;cursor:pointer" style-hover="background:rgba(239,68,68,.16)">Eliminar</button>
               </div>
             </div>
           </sc-for>

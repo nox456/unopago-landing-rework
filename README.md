@@ -36,6 +36,12 @@ UnoPago es una plataforma web moderna diseñada para la gestión de pagos, cobro
   - **Ajuste Numérico de Tamaños (px)**: Control preciso sobre los tamaños de Títulos (`h1`/`h2`), Subtítulos (`h3`/`h4`) y Párrafos (`p`).
   - **Muestra de Tamaños en Tiempo Real**: Recuadro dinámico dentro de los formularios de creación y edición para evaluar visualmente la escala de los textos antes de guardar.
 
+- **Módulo 5: Video y Audio**
+  - **Video sin audio (MP4)**: se sube el video de presentación; el panel genera solo la miniatura y la tira de previews de la línea de reproducción.
+  - **Pistas de audio por idioma**: cada pista (MP3, M4A, OGG, WAV…) aparece en el menú “Pista de audio” del reproductor. Se pueden ordenar, marcar una como predeterminada y eliminar; el panel avisa si una pista no dura lo mismo que el video.
+  - **Subtítulos WebVTT (.vtt)**: un archivo por idioma para el menú “Subtítulos” (se eligen aparte del audio). El panel valida el formato y muestra cuántas líneas tiene y hasta qué segundo llega.
+  - **Almacenamiento en IndexedDB** (`js/media-store.js`): los archivos pesan demasiado para `localStorage`. Mientras no se suba nada, la landing usa los archivos de demostración de `media/`.
+
 ---
 
 ## 📂 Estructura del Proyecto
@@ -47,11 +53,25 @@ unopago-landing-rework/
 ├── admin.html            # Panel de Administración de Colores y Tipografías
 ├── css/
 │   ├── landing.css       # Tokens de respaldo de la Landing (5 roles + escala tipográfica)
+│   ├── landing/
+│   │   ├── video-player.css  # Controles propios del reproductor de video (.vp-*)
+│   │   └── gallery.css       # Galería de imágenes bajo el video (.gal*)
 │   └── styles.css        # Estilos generales del Panel de Administración
 ├── js/
 │   ├── app.js            # Lógica y estado React / DC-Runtime del Admin Panel
 │   ├── landing.js        # Lógica de la Landing: pantalla de carga, temas, tipografías y carrusel
+│   ├── media-store.js    # IndexedDB compartido admin ↔ landing: video sin audio, pistas de audio y subtítulos
+│   ├── landing/
+│   │   ├── icons.js          # Helper de íconos SVG compartido (window.UnoLanding.icon)
+│   │   ├── video-player.js   # Reproductor: video mudo + pista de audio sincronizada, subtítulos, pantalla completa
+│   │   └── gallery.js        # Galería de imágenes de 3 en 3 (lee lo que carga el admin)
 │   └── vendor/           # Librerías cliente (React, ReactDOM, DC Runtime)
+├── media/
+│   ├── cobrar-cliente-sin-audio.mp4   # Video de demostración sin audio
+│   ├── cobrar-cliente-audio-es.m4a    # Pista de demostración en español
+│   ├── cobrar-cliente-audio-en.m4a    # Pista de demostración en inglés
+│   ├── cobrar-cliente-subs-es.vtt     # Subtítulos de demostración (español) para subir desde el admin
+│   └── cobrar-cliente-subs-en.vtt     # Subtítulos de demostración (inglés) para subir desde el admin
 └── README.md             # Documentación del proyecto
 ```
 
@@ -59,6 +79,11 @@ unopago-landing-rework/
 > `<script type="text/x-dc" data-dc-script>` incrustado en `landing.html`, porque
 > lee su `textContent` y un `src` externo llega vacío. `js/landing.js` es la copia
 > editable de ese mismo componente: **si tocas uno, copia el cambio al otro.**
+>
+> El reproductor de video y la galería ya no viven en ese bloque: son scripts
+> normales en `js/landing/` que se cargan antes y se publican en
+> `window.UnoLanding`. El componente solo crea `VideoPlayer` y `Gallery`, les
+> delega su ciclo de vida y mezcla sus valores en `renderVals()`.
 
 > **Pantalla de carga:** el tangram vive dentro de la plantilla `<x-dc>` y sus 7
 > piezas se pintan con `var(--c-bg)`, `var(--c-surface)`, `var(--c-text)`,
